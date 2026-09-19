@@ -1,12 +1,14 @@
 package com.xmitya.ideadtf.toolwindow
 
 import com.intellij.icons.AllIcons
+import com.intellij.ide.CommonActionsManager
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.DataSink
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.SimpleToolWindowPanel
@@ -120,8 +122,16 @@ class DtfTaskTreePanel(private val project: Project) : SimpleToolWindowPanel(tru
         }
 
     private fun createToolbar(): JComponent {
-        val toolbar = ActionManager.getInstance()
-            .createActionToolbar(TOOLBAR_PLACE, DefaultActionGroup(RefreshAction()), true)
+        // The header variants, which is what gives the paired chevrons and the same shortcuts the
+        // Project view has - expand-selected on the plain one, expand-all on shift.
+        val common = CommonActionsManager.getInstance()
+        val group = DefaultActionGroup(
+            RefreshAction(),
+            Separator.getInstance(),
+            common.createExpandAllHeaderAction(tree),
+            common.createCollapseAllHeaderAction(tree),
+        )
+        val toolbar = ActionManager.getInstance().createActionToolbar(TOOLBAR_PLACE, group, true)
         toolbar.targetComponent = tree
         return toolbar.component
     }

@@ -1,5 +1,7 @@
 package com.xmitya.ideadtf
 
+import com.intellij.ide.DefaultTreeExpander
+import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.application.ReadAction
 import com.intellij.ui.treeStructure.Tree
 import com.xmitya.ideadtf.search.DtfTaskSearcher
@@ -63,20 +65,8 @@ class DtfTaskTreePanelTest : DtfFixtureTestCase() {
 
     /** Many modules stay shut: 55 expanded at once is a wall, not an overview. */
     fun testSeveralModulesStayCollapsed() {
-        addJavaTask("HelloTask", "HELLO_TASK")
-        addJavaTask("OtherTask", "OTHER_TASK")
-        val tasks = snapshot().modules.single().tasks
         val panel = DtfTaskTreePanel(project)
-        panel.show(
-            DtfTaskSnapshot(
-                project.name,
-                listOf(
-                    DtfTaskModuleGroup("alpha", listOf(tasks.first())),
-                    DtfTaskModuleGroup("beta", listOf(tasks.last())),
-                ),
-                stamp = 1L,
-            ),
-        )
+        panel.show(twoModules())
         val tree = panel.preferredFocusComponent as Tree
         assertEquals(2, tree.model.getChildCount(tree.model.root))
         assertEquals(3, tree.rowCount) // root plus two collapsed modules
@@ -101,4 +91,48 @@ class DtfTaskTreePanelTest : DtfFixtureTestCase() {
         ReadAction.compute<DtfTaskSnapshot, RuntimeException> {
             DtfTaskSnapshotBuilder(project).build(DtfTaskSearcher(project).findAllTasks(), stamp = 1L)
         }
+
+    /** The toolbar the Project view taught people to expect. */
+    fun testToolbarOffersRefreshExpandAndCollapse() {
+        val group = DtfTaskTreePanel(project).getActions(true).single() as DefaultActionGroup
+        assertEquals(
+            listOf("Refresh", "Expand All", "Collapse All"),
+            group.getChildren(null).mapNotNull { it.templatePresentation.text },
+        )
+    }
+
+    /**
+     * And that they have something to act on. A tree whose modules were all leaves, or one whose
+     * root was collapsed away, would leave both buttons permanently greyed out.
+     */
+    fun testTheTreeCanBeExpandedAndCollapsed() {
+        val panel = DtfTaskTreePanel(project)
+        panel.show(twoModules())
+        val tree = panel.preferredFocusComponent as Tree
+        val expander = DefaultTreeExpander(tree)
+
+        assertEquals(3, tree.rowCount) // root plus two collapsed modules
+        assertTrue(expander.canExpand())
+        assertTrue(expander.canCollapse())
+
+        expander.expandAll()
+        assertEquals(5, tree.rowCount)
+
+        expander.collapseAll()
+        assertTrue("collapse left the tree expanded", tree.rowCount < 5)
+    }
+
+    private fun twoModules(): DtfTaskSnapshot {
+        addJavaTask("HelloTask", "HELLO_TASK")
+        addJavaTask("OtherTask", "OTHER_TASK")
+        val tasks = snapshot().modules.single().tasks
+        return DtfTaskSnapshot(
+            project.name,
+            listOf(
+                DtfTaskModuleGroup("alpha", listOf(tasks.first())),
+                DtfTaskModuleGroup("beta", listOf(tasks.last())),
+            ),
+            stamp = 1L,
+        )
+    }
 }
