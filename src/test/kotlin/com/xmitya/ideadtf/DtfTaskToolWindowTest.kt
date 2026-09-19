@@ -23,10 +23,34 @@ class DtfTaskToolWindowTest : DtfFixtureTestCase() {
         assertTrue(DtfTaskToolWindowFactory().shouldBeAvailable(project))
     }
 
-    /** Loading the SVG rather than a "missing icon" placeholder is what the size proves. */
-    fun testStripeIconLoadsAtTheClassicStripeSize() {
-        assertEquals(13, DtfIcons.ToolWindow.iconWidth)
-        assertEquals(13, DtfIcons.ToolWindow.iconHeight)
+    /**
+     * The sizes the stripe asks for, read from the files.
+     *
+     * `Icon.getIconWidth` was the obvious thing to assert and is the wrong one. It answers 1 - the
+     * platform's 1x1 `EMPTY_ICON` - whenever the icon is not resolvable in that JVM at that moment,
+     * and whether it is depends on which test class last left the icon manager activated. That is
+     * global state this test does not own, and it is why the assertion passed locally and failed on
+     * CI. The claim worth making is that the classic stripe gets 13x13 and the new UI 20x20, and
+     * that is a property of the files.
+     */
+    fun testIconsDeclareTheSizesTheStripeAsksFor() {
+        assertEquals(13, declaredSizeOf("icons/dtfToolWindow.svg"))
+        assertEquals(13, declaredSizeOf("icons/dtfToolWindow_dark.svg"))
+        assertEquals(16, declaredSizeOf("icons/expui/dtfToolWindow.svg"))
+        assertEquals(16, declaredSizeOf("icons/expui/dtfToolWindow_dark.svg"))
+        assertEquals(20, declaredSizeOf("icons/expui/dtfToolWindow@20x20.svg"))
+        assertEquals(20, declaredSizeOf("icons/expui/dtfToolWindow@20x20_dark.svg"))
+    }
+
+    private fun declaredSizeOf(path: String): Int {
+        val svg = javaClass.getResourceAsStream("/$path")!!.reader().readText()
+        val width = SIZE.find(svg, svg.indexOf("width="))
+        val height = SIZE.find(svg, svg.indexOf("height="))
+        assertNotNull("no width in $path", width)
+        assertNotNull("no height in $path", height)
+        // A stripe icon that is not square is a stretched one, which no assertion elsewhere catches.
+        assertEquals("$path is not square", width!!.groupValues[1], height!!.groupValues[1])
+        return width.groupValues[1].toInt()
     }
 
     /**
@@ -48,6 +72,8 @@ class DtfTaskToolWindowTest : DtfFixtureTestCase() {
 
     private companion object {
         const val MAPPING_FILE = "DtfIconMappings.json"
+
+        val SIZE = Regex("""(?:width|height)="(\d+)"""")
 
         val ICON_PATHS = listOf(
             "icons/dtfToolWindow.svg",
