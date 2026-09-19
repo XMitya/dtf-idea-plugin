@@ -1,6 +1,6 @@
 <idea-plugin>
     <id>com.xmitya.ideadtf</id>
-    <name>Distributed Task Framework</name>
+    <name>Distributed Task Framework (DTF)</name>
     <vendor>xmitya</vendor>
 
     <description><![CDATA[
