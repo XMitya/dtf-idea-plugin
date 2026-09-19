@@ -1,0 +1,19 @@
+<idea-plugin>
+    <id>com.xmitya.ideadtf</id>
+    <name>Distributed Task Framework</name>
+    <vendor>xmitya</vendor>
+
+    <description><![CDATA[
+        Editor support for the <a href="https://github.com/cherkovskiyandrey/distributed-task-framework">Distributed
+        Task Framework</a> (DTF).
+        <p>Marks classes implementing <code>com.distributed_task_framework.task.Task</code> with a gutter icon and
+        lets you jump from a task to every place where it is scheduled via
+        <code>DistributedTaskService.schedule(...)</code>. Works for Java and Kotlin sources.</p>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.java</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+    </extensions>
+</idea-plugin>
