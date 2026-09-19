@@ -6,6 +6,8 @@ import com.intellij.psi.CommonClassNames
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
+import com.intellij.psi.PsiModifier
+import com.intellij.psi.util.InheritanceUtil
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.MethodReferencesSearch
 import com.intellij.psi.search.searches.ReferencesSearch
@@ -17,6 +19,7 @@ import org.jetbrains.uast.UElement
 import org.jetbrains.uast.UMethod
 import org.jetbrains.uast.UReferenceExpression
 import org.jetbrains.uast.UVariable
+import org.jetbrains.uast.getUCallExpression
 import org.jetbrains.uast.toUElement
 import org.jetbrains.uast.toUElementOfType
 import org.jetbrains.uast.visitor.AbstractUastVisitor
@@ -31,6 +34,10 @@ class ScheduleCallSearcher(private val project: Project) {
     /** One hop through a local variable, and one hop through a wrapper's parameter. */
     private val maxDepth = 2
 
+    private companion object {
+        const val SCHEDULE_PREFIX = "schedule"
+    }
+
     fun findScheduleSites(taskClass: PsiClass): List<ScheduleCallSite> {
         val found = LinkedHashMap<Pair<String, Int>, ScheduleCallSite>()
         val scope = GlobalSearchScope.projectScope(project)
@@ -40,6 +47,7 @@ class ScheduleCallSearcher(private val project: Project) {
             collectFrom(referencesTo(anchor, scope), found, depth = 0, scope = scope)
         }
         collectSelfSchedules(taskClass, found)
+        collectSchedulableBeanCalls(taskClass, found, scope)
 
         return found.values.sortedWith(compareBy({ it.tier.ordinal }, { it.key.first }, { it.key.second }))
     }
@@ -144,6 +152,42 @@ class ScheduleCallSearcher(private val project: Project) {
                     return false
                 }
             })
+        }
+    }
+
+    /**
+     * Tasks that schedule themselves: `sendVkNotificationTask.schedule(dto, affinityKey)`.
+     *
+     * Some base classes expose their own `schedule` that fills in the `TaskDef` internally, so the
+     * call site mentions no `TaskDef` at all and is invisible to the reference search. Such a call
+     * is attributed to this task when the receiver's declared type is this task or a subclass of
+     * it; a receiver typed as the shared base cannot be attributed to any one task and is skipped.
+     */
+    private fun collectSchedulableBeanCalls(
+        taskClass: PsiClass,
+        found: MutableMap<Pair<String, Int>, ScheduleCallSite>,
+        scope: GlobalSearchScope,
+    ) {
+        val taskFqn = taskClass.qualifiedName ?: return
+        val schedulingMethods = supertypeClosure(taskClass)
+            .flatMap { it.methods.asIterable() }
+            .filter {
+                it.name.startsWith(SCHEDULE_PREFIX) &&
+                    !it.hasModifierProperty(PsiModifier.STATIC) &&
+                    !it.hasModifierProperty(PsiModifier.ABSTRACT)
+            }
+
+        for (method in schedulingMethods) {
+            ProgressManager.checkCanceled()
+            for (reference in MethodReferencesSearch.search(method, scope, true).findAll()) {
+                ProgressManager.checkCanceled()
+                val uRef = CallArgumentMatcher.asExpression(reference.element) ?: continue
+                val call = uRef.getUCallExpression() ?: continue
+                val receiverType = call.receiverType ?: continue
+                if (InheritanceUtil.isInheritor(receiverType, taskFqn)) {
+                    addSite(call, ScheduleTier.WRAPPER, found)
+                }
+            }
         }
     }
 

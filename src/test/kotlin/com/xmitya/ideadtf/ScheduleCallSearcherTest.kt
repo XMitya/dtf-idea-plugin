@@ -268,6 +268,111 @@ class ScheduleCallSearcherTest : DtfFixtureTestCase() {
         assertEquals(1, search("AppSitemapTask").size)
     }
 
+    /**
+     * A base class that exposes its own schedule() and fills in the TaskDef internally, so the call
+     * site mentions no TaskDef at all.
+     */
+    fun testSchedulableTaskBeanCall() {
+        myFixture.addFileToProject(
+            "AffinitySchedulableTask.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+            import com.distributed_task_framework.model.TaskId;
+            import com.distributed_task_framework.service.DistributedTaskService;
+            import com.distributed_task_framework.task.Task;
+
+            public abstract class AffinitySchedulableTask<T> implements Task<T> {
+                private DistributedTaskService distributedTaskService;
+
+                public TaskId schedule(T message, String affinity) throws Exception {
+                    return distributedTaskService.schedule(getDef(), ExecutionContext.simple(message));
+                }
+            }
+            """.trimIndent(),
+        )
+        myFixture.addFileToProject(
+            "SendVkNotificationTask.java",
+            """
+            import com.distributed_task_framework.model.TaskDef;
+
+            public class SendVkNotificationTask extends AffinitySchedulableTask<String> {
+                public static final TaskDef<String> TASK_DEF = TaskDef.privateTaskDef("SEND", String.class);
+
+                @Override
+                public TaskDef<String> getDef() { return TASK_DEF; }
+            }
+            """.trimIndent(),
+        )
+        myFixture.addFileToProject(
+            "Consumer.java",
+            """
+            public class Consumer {
+                private SendVkNotificationTask sendVkNotificationTask;
+
+                public void consume() throws Exception {
+                    sendVkNotificationTask.schedule("payload", "affinity");
+                }
+            }
+            """.trimIndent(),
+        )
+        val sites = search("SendVkNotificationTask")
+        assertTrue(
+            "expected the bean call site, got " + sites.map { it.element.text },
+            sites.any { it.element.text.contains("sendVkNotificationTask.schedule") },
+        )
+    }
+
+    /** A receiver typed as the shared base cannot be attributed to any single task. */
+    fun testSchedulableBaseReceiverIsNotAttributed() {
+        myFixture.addFileToProject(
+            "AffinitySchedulableTask.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+            import com.distributed_task_framework.model.TaskId;
+            import com.distributed_task_framework.service.DistributedTaskService;
+            import com.distributed_task_framework.task.Task;
+
+            public abstract class AffinitySchedulableTask<T> implements Task<T> {
+                private DistributedTaskService distributedTaskService;
+
+                public TaskId schedule(T message, String affinity) throws Exception {
+                    return distributedTaskService.schedule(getDef(), ExecutionContext.simple(message));
+                }
+            }
+            """.trimIndent(),
+        )
+        myFixture.addFileToProject(
+            "SendVkNotificationTask.java",
+            """
+            import com.distributed_task_framework.model.TaskDef;
+
+            public class SendVkNotificationTask extends AffinitySchedulableTask<String> {
+                public static final TaskDef<String> TASK_DEF = TaskDef.privateTaskDef("SEND", String.class);
+
+                @Override
+                public TaskDef<String> getDef() { return TASK_DEF; }
+            }
+            """.trimIndent(),
+        )
+        myFixture.addFileToProject(
+            "GenericConsumer.java",
+            """
+            public class GenericConsumer {
+                private AffinitySchedulableTask<String> anyTask;
+
+                public void consume() throws Exception {
+                    anyTask.schedule("payload", "affinity");
+                }
+            }
+            """.trimIndent(),
+        )
+        val sites = search("SendVkNotificationTask")
+        assertFalse(
+            "a base-typed receiver must not be attributed, got " + sites.map { it.element.text },
+            sites.any { it.element.text.contains("anyTask.schedule") },
+        )
+    }
+
     private fun addJavaTaskWithOwnConstant() {
         myFixture.addFileToProject(
             "HelloTask.java",
