@@ -1,0 +1,12 @@
+<idea-plugin>
+    <!--
+      Loaded only when the YAML plugin is present. Everything that names a YAML class lives behind
+      this file, so the plugin still works - on @TaskSchedule alone - when YAML is disabled.
+    -->
+    <extensions defaultExtensionNs="com.intellij">
+        <fileBasedIndex implementation="com.xmitya.ideadtf.cron.yaml.DtfCronYamlIndex"/>
+    </extensions>
+    <extensions defaultExtensionNs="com.xmitya.ideadtf">
+        <cronConfigSource implementation="com.xmitya.ideadtf.cron.yaml.YamlCronConfigSource"/>
+    </extensions>
+</idea-plugin>

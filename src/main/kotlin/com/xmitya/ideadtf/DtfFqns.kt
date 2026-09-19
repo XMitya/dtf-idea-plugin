@@ -31,6 +31,30 @@ object DtfFqns {
     const val GET_DEF = "getDef"
 
     /**
+     * The Spring property path a task's settings are bound from, as
+     * `distributed-task.task-properties-group.task-properties.<TASK_NAME>.cron`.
+     *
+     * Segment names go through Spring's relaxed binding, so `distributedTask` reaches the same
+     * place; the task name below [CONFIG_TASK_PROPERTIES] does not, because the framework looks it
+     * up with a plain case-sensitive `Map#get`.
+     */
+    const val CONFIG_PREFIX = "distributed-task"
+    const val CONFIG_GROUP = "task-properties-group"
+    const val CONFIG_TASK_PROPERTIES = "task-properties"
+
+    /**
+     * Group-wide defaults. Read only so that the sentinel can be indexed; they sit *below*
+     * [TASK_SCHEDULE_ANNOTATION] in the framework's merge order, so a cron here does not make a task
+     * a cron task as far as the gutter is concerned.
+     */
+    const val CONFIG_DEFAULT_PROPERTIES = "default-properties"
+
+    const val CONFIG_CRON = "cron"
+
+    /** The only attribute of [TASK_SCHEDULE_ANNOTATION]. */
+    const val CRON_ATTRIBUTE = "cron"
+
+    /**
      * Methods that launch a task. `scheduleUnsafe` only exists since DTF 2.x; listing it here is
      * harmless on 1.x.
      */

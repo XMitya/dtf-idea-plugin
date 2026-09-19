@@ -3,9 +3,9 @@
 Editor support for the [Distributed Task Framework](https://github.com/cherkovskiyandrey/distributed-task-framework)
 (DTF).
 
-Navigates between a DTF task and the places it is scheduled, in both directions, from a gutter icon.
-Works for Java and Kotlin sources, and needs only IntelliJ IDEA Community — no Ultimate features are
-used.
+Navigates between a DTF task and the places it is scheduled, in both directions, from a gutter icon,
+and marks the tasks the framework launches on a schedule. Works for Java and Kotlin sources, and
+needs only IntelliJ IDEA Community — no Ultimate features are used.
 
 ## Installing
 
@@ -41,6 +41,11 @@ actually runs means Go To Declaration on the constant, landing in a holder class
 from there. So the call gets an icon of its own — the same **T**, with a red arrow down — that
 resolves the task and jumps to it. A definition shared by several tasks, or picked by a conditional,
 opens a popup naming each task, its definition and `file:line`.
+
+A cron task has no call site to find. It carries a yellow **clock** instead of the **T**, and the
+click opens the place its schedule is configured — the `<TASK_NAME>:` line in `application.yaml`.
+Where several profiles configure the same task, all of them are listed, each showing its own cron
+expression, so the one that is actually switched off is visible rather than assumed.
 
 Both searches run on click, under a cancellable progress dialog, never during highlighting.
 
@@ -86,6 +91,21 @@ site itself.
 | `schedule(context = ctx, taskDef = DEF)` | Kotlin named arguments, in any order |
 | `sendVkNotificationTask.schedule(dto, key)` | the receiver's own type, no `TaskDef` in sight |
 
+**Cron tasks** — a task is treated as scheduled when either of these says so, and they are read in
+the order the framework merges them, so configuration wins over the annotation.
+
+| Shape | Example |
+| --- | --- |
+| `@TaskSchedule` on the class | `@TaskSchedule(cron = "0 0/10 * ? * *")` |
+| Per-task YAML | `distributed-task.task-properties-group.task-properties.<NAME>.cron` |
+| The same, flattened | `…task-properties[NAME].cron=0 0 1 * * *` in `application.properties` |
+
+The key under `task-properties` is the string in `TaskDef.privateTaskDef("…")`, never the class
+name — the framework looks it up with a plain `Map#get`. The path leading to it goes through Spring's
+relaxed binding, so `distributedTask`, `distributed-task` and a compressed
+`distributed-task.task-properties-group:` all reach the same place. Multiple YAML documents in one
+file are searched separately, which is how profiles are usually written.
+
 ## Known limitations
 
 - **Dispatch that is not statically decidable** is not resolved: bean-selector registries
@@ -107,8 +127,32 @@ site itself.
 - **Dataflow is two hops deep** by design. Going forward that is one hop through a local variable
   and one through a wrapper's parameter; coming back it is two chained locals, the wrapper
   parameter being where the reverse direction stops rather than continues.
-- **Cron tasks** have no explicit call site. Where the plugin can tell (`@TaskSchedule`), it says so
-  instead of reporting nothing found; cron configured in YAML is not read.
+- **A group-wide `default-properties.cron` is ignored.** It sits *below* `@TaskSchedule` in the
+  framework's merge order, and honouring it would put a clock on every task in the module from one
+  line of YAML.
+- **A blank cron means disabled**, since `hasCron()` is `StringUtils.hasText`. `cron:`, `cron: ''`
+  and `cron: ""` do not make a task a cron task; such entries are still listed in the popup, labelled,
+  because "configured here, and switched off" is the thing worth seeing.
+- **Spring profiles are not evaluated.** Every file configuring the task is listed; which one is
+  active at runtime is not something the IDE knows.
+- **`${VAR}` is not resolved** — it is shown as written and counts as a schedule. The expression is
+  never validated either; DTF accepts a cron expression or an ISO-8601 `Duration`.
+- **Configuration is matched across the whole project.** Two modules using the same task name would
+  see each other's files. Narrowing to the module would lose tasks that arrive as a binary dependency.
+- **`.properties` needs bracket notation** for the usual `SCREAMING_SNAKE` names: Spring normalises a
+  dotted map key to lower case, so only `task-properties[NAME].cron` binds. The dotted form is
+  recognised too, for the lower-case kebab names that do bind.
+- **A cron configured in code is not detected** — `registerTask(task, TaskSettings.builder().cron(…)
+  .build())`. Knowing which task such a call registers means resolving its first argument, which is a
+  project-wide search, and the gutter is decided during highlighting where searching is not allowed.
+  An index cannot stand in: indexing runs without resolve, so it would key on a textual guess and put
+  wrong icons in the gutter.
+- **`@TaskSchedule` is read on the class and one meta-annotation deep.** It is not `@Inherited`, so a
+  base class carrying it does not schedule its subclasses — which is what the framework does too.
+- **YAML-configured cron needs the YAML plugin.** It is bundled and enabled by default; with it
+  switched off the plugin still loads and falls back to `@TaskSchedule` alone.
+- **The clock replaces the T**, so a cron task that is *also* scheduled explicitly no longer offers
+  its list of call sites.
 - **Saga steps** (`@SagaMethod`) are a separate mechanism with no `TaskDef` in user code, and are
   not covered.
 

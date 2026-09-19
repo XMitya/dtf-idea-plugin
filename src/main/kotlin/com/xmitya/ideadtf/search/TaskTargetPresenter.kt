@@ -34,7 +34,7 @@ class TaskTargetPresenter(private val project: Project) {
     private fun presentationFor(taskClass: PsiClass, anchor: PsiElement): TargetPresentation {
         val presentable = taskClass.name ?: taskClass.qualifiedName ?: anchor.containingFile?.name.orEmpty()
         val qualifiedName = taskClass.qualifiedName
-        val taskName = DtfTaskDefResolver.resolve(taskClass).taskName
+        val taskName = DtfTaskDefResolver.resolveCached(taskClass).taskName
 
         var builder = TargetPresentation.builder(presentable).icon(AllIcons.Nodes.Class)
         if (qualifiedName != null) {

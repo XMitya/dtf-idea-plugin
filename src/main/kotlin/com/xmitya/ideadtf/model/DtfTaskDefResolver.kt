@@ -8,6 +8,7 @@ import com.intellij.psi.PsiModifier
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.MethodReferencesSearch
 import com.intellij.psi.search.searches.ReferencesSearch
+import com.intellij.psi.util.CachedValuesManager
 import com.intellij.psi.util.InheritanceUtil
 import com.xmitya.ideadtf.DtfFqns
 import org.jetbrains.uast.UCallExpression
@@ -32,6 +33,16 @@ import org.jetbrains.uast.visitor.AbstractUastVisitor
  * with either a block body or an expression body, and with or without a declared return type.
  */
 object DtfTaskDefResolver {
+
+    /**
+     * [resolve], memoized per class.
+     *
+     * The line marker pass now asks every task class for its name, not just the one being hovered,
+     * so the walk through `getDef()` is worth keeping. The result holds PSI, hence a cache that is
+     * dropped on any PSI change - including one in the file the constant lives in.
+     */
+    fun resolveCached(psiClass: PsiClass): DtfTaskDef =
+        CachedValuesManager.getProjectPsiDependentCache(psiClass) { resolve(it) }
 
     fun resolve(psiClass: PsiClass): DtfTaskDef {
         val getDef = findGetDefMethod(psiClass) ?: return DtfTaskDef.EMPTY
