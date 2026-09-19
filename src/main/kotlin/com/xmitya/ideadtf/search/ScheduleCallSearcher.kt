@@ -146,7 +146,7 @@ class ScheduleCallSearcher(private val project: Project) {
                     val method = node.resolve() ?: return false
                     val tier = CallArgumentMatcher.classify(method) ?: return false
                     val arg0 = node.getArgumentForParameter(0) ?: return false
-                    if (resolvesToGetDef(arg0)) {
+                    if (CallArgumentMatcher.resolvesToGetDef(arg0)) {
                         addSite(node, tier, found)
                     }
                     return false
@@ -189,12 +189,6 @@ class ScheduleCallSearcher(private val project: Project) {
                 }
             }
         }
-    }
-
-    private fun resolvesToGetDef(argument: UElement): Boolean {
-        val resolved = (argument as? UReferenceExpression)?.resolve()
-            ?: ((argument as? UCallExpression)?.resolve())
-        return resolved is PsiMethod && resolved.name == DtfFqns.GET_DEF && resolved.parameterList.isEmpty
     }
 
     /** The class plus everything it inherits from, minus the framework interface itself. */

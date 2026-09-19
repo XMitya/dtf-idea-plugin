@@ -8,6 +8,7 @@ import com.xmitya.ideadtf.DtfFqns
 import org.jetbrains.uast.UCallExpression
 import org.jetbrains.uast.UElement
 import org.jetbrains.uast.UExpression
+import org.jetbrains.uast.UReferenceExpression
 import org.jetbrains.uast.UVariable
 import org.jetbrains.uast.getUParentForIdentifier
 import org.jetbrains.uast.toUElementOfType
@@ -108,5 +109,17 @@ object CallArgumentMatcher {
         } else {
             null
         }
+    }
+
+    /**
+     * Whether [argument] is the task's own `getDef()`.
+     *
+     * Written as `getDef()` in Java and read as the `def` property in Kotlin, which resolves to the
+     * same accessor - hence matching the resolved method rather than the source text.
+     */
+    fun resolvesToGetDef(argument: UElement): Boolean {
+        val resolved = (argument as? UReferenceExpression)?.resolve()
+            ?: (argument as? UCallExpression)?.resolve()
+        return resolved is PsiMethod && resolved.name == DtfFqns.GET_DEF && resolved.parameterList.isEmpty
     }
 }
