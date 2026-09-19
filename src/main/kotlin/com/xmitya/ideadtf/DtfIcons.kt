@@ -22,4 +22,14 @@ object DtfIcons {
      */
     @JvmField
     val ScheduleGutter: Icon = IconLoader.getIcon("/icons/dtfSchedule.svg", DtfIcons::class.java)
+
+    /**
+     * Gutter marker for a task the framework launches on a schedule.
+     *
+     * A clock rather than another variant of the T: this answers a different question - when does it
+     * run - and the yellow separates it at a glance from the blue pair that answers who launches it.
+     * The hands read 9:00, which is unambiguous at 16x16 without any numerals.
+     */
+    @JvmField
+    val CronGutter: Icon = IconLoader.getIcon("/icons/dtfCron.svg", DtfIcons::class.java)
 }

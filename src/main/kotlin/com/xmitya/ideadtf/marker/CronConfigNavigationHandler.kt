@@ -7,24 +7,26 @@ import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
+import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.list.createTargetPopup
 import com.xmitya.ideadtf.DtfBundle
+import com.xmitya.ideadtf.cron.DtfCronConfigSource
 import com.xmitya.ideadtf.model.CronMark
 import com.xmitya.ideadtf.model.DtfCronModel
 import com.xmitya.ideadtf.model.DtfTaskDefResolver
-import com.xmitya.ideadtf.search.NavigableScheduleSite
-import com.xmitya.ideadtf.search.ScheduleCallSearcher
-import com.xmitya.ideadtf.search.ScheduleSitePresenter
+import com.xmitya.ideadtf.search.CronSitePresenter
+import com.xmitya.ideadtf.search.NavigableCronSite
 import java.awt.event.MouseEvent
 
 /**
- * Runs the search when the gutter icon is clicked and shows the result.
+ * Opens the place a cron task's schedule is configured.
  *
- * The search is deliberately not done during highlighting - it walks the whole project - so it
- * happens here, under a cancellable modal progress.
+ * The counterpart of [ScheduleSitesNavigationHandler] for tasks that have no call site at all, and
+ * built the same way: the work happens on click, under a cancellable modal progress, never during
+ * highlighting.
  */
-class ScheduleSitesNavigationHandler : GutterIconNavigationHandler<PsiElement> {
+class CronConfigNavigationHandler : GutterIconNavigationHandler<PsiElement> {
 
     override fun navigate(event: MouseEvent, element: PsiElement) {
         val project = element.project
@@ -37,27 +39,34 @@ class ScheduleSitesNavigationHandler : GutterIconNavigationHandler<PsiElement> {
 
         val sites = try {
             // Opens a read action of its own, so nothing here needs to wrap one.
-            ActionUtil.underModalProgress(project, DtfBundle.message("dtf.progress.searching")) {
-                val found = ScheduleCallSearcher(project).findScheduleSites(taskClass)
-                ScheduleSitePresenter(project).present(found)
+            ActionUtil.underModalProgress(project, DtfBundle.message("dtf.progress.locating")) {
+                val taskName = DtfTaskDefResolver.resolveCached(taskClass).taskName
+                if (taskName == null) {
+                    emptyList()
+                } else {
+                    val scope = GlobalSearchScope.projectScope(project)
+                    val found = DtfCronConfigSource.EP.extensionList
+                        .flatMap { it.findSites(project, taskName, scope) }
+                    CronSitePresenter(project).present(found)
+                }
             }
         } catch (_: ProcessCanceledException) {
             return
         }
 
         when (sites.size) {
-            0 -> showMessage(event, emptyMessageFor(taskClass))
+            0 -> showMessage(event, annotationMessageFor(taskClass))
             1 -> sites.single().navigate()
             else -> showPopup(event, taskClass, sites)
         }
     }
 
-    private fun showPopup(event: MouseEvent, taskClass: PsiClass, sites: List<NavigableScheduleSite>) {
+    private fun showPopup(event: MouseEvent, taskClass: PsiClass, sites: List<NavigableCronSite>) {
         val taskName = DtfTaskDefResolver.resolveCached(taskClass).taskName
         val title = if (taskName != null) {
-            DtfBundle.message("dtf.popup.title.named", taskName, sites.size)
+            DtfBundle.message("dtf.popup.cron.title.named", taskName, sites.size)
         } else {
-            DtfBundle.message("dtf.popup.title", sites.size)
+            DtfBundle.message("dtf.popup.cron.title", sites.size)
         }
         // The overload taking presentations as a parallel list, rather than the one taking a
         // function: that one is marked internal API.
@@ -66,18 +75,17 @@ class ScheduleSitesNavigationHandler : GutterIconNavigationHandler<PsiElement> {
     }
 
     /**
-     * A cron task has no explicit call site by design; say so instead of "nothing found".
-     *
-     * Such a task normally carries the clock icon and never reaches this handler at all, so this is
-     * the fallback for one whose schedule the plugin could not attribute - but it asks
-     * [DtfCronModel] rather than re-testing the annotation, so both icons agree on what cron means.
+     * A schedule set by the annotation alone has nowhere to navigate to, so name it instead of
+     * leaving the click looking broken.
      */
-    private fun emptyMessageFor(taskClass: PsiClass): String =
-        if (DtfCronModel.cronMarkOf(taskClass) is CronMark.Cron) {
-            DtfBundle.message("dtf.popup.empty.cron")
+    private fun annotationMessageFor(taskClass: PsiClass): String {
+        val expression = (DtfCronModel.cronMarkOf(taskClass) as? CronMark.Cron)?.expression
+        return if (!expression.isNullOrEmpty()) {
+            DtfBundle.message("dtf.popup.cron.annotation", expression)
         } else {
-            DtfBundle.message("dtf.popup.empty")
+            DtfBundle.message("dtf.popup.cron.empty")
         }
+    }
 
     private fun showMessage(event: MouseEvent, message: String) {
         JBPopupFactory.getInstance()

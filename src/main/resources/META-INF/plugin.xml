@@ -10,10 +10,24 @@
         every class implementing <code>com.distributed_task_framework.task.Task</code> lists the places it is
         scheduled; an icon on every <code>schedule(...)</code> call opens the task it launches. Works for Java
         and Kotlin sources.</p>
+        <p>Tasks the framework launches on a schedule - through <code>@TaskSchedule</code> or a
+        <code>cron</code> in <code>application.yaml</code>/<code>.properties</code> - are marked with a clock
+        instead, which opens the place the schedule is configured.</p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.java</depends>
+    <!-- Cron configured in YAML. Optional, so disabling the YAML plugin degrades cron detection to
+         the @TaskSchedule annotation instead of preventing this plugin from loading. -->
+    <depends optional="true" config-file="dtf-yaml.xml">org.jetbrains.plugins.yaml</depends>
+
+    <extensionPoints>
+        <!-- One per configuration format. The core asks this list rather than naming an
+             implementation, which is what lets the YAML one be optional. -->
+        <extensionPoint name="cronConfigSource"
+                        interface="com.xmitya.ideadtf.cron.DtfCronConfigSource"
+                        dynamic="true"/>
+    </extensionPoints>
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- language="UAST" dispatches for every language with a UAST plugin, i.e. Java and Kotlin. -->
@@ -21,5 +35,11 @@
                                         implementationClass="com.xmitya.ideadtf.marker.DtfTaskLineMarkerProvider"/>
         <codeInsight.lineMarkerProvider language="UAST"
                                         implementationClass="com.xmitya.ideadtf.marker.DtfScheduleCallLineMarkerProvider"/>
+        <!-- Filters on the file extension, so it needs no dependency on the Properties plugin. -->
+        <fileBasedIndex implementation="com.xmitya.ideadtf.cron.properties.DtfCronPropertiesIndex"/>
+    </extensions>
+
+    <extensions defaultExtensionNs="com.xmitya.ideadtf">
+        <cronConfigSource implementation="com.xmitya.ideadtf.cron.properties.PropertiesCronConfigSource"/>
     </extensions>
 </idea-plugin>

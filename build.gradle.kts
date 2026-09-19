@@ -26,6 +26,10 @@ dependencies {
         intellijIdeaCommunity("2025.2.3")
         bundledPlugin("com.intellij.java")    // UAST + Java PSI
         bundledPlugin("org.jetbrains.kotlin") // Kotlin UAST
+        // YAML PSI, for reading `distributed-task.task-properties-group.task-properties.<NAME>.cron`.
+        // Optional at runtime - see the <depends optional> in plugin.xml - but needed here to compile
+        // against it and to have the plugin enabled in the test and sandbox IDEs.
+        bundledPlugin("org.jetbrains.plugins.yaml")
         pluginVerifier()
         testFramework(TestFrameworkType.Platform)
         testFramework(TestFrameworkType.Plugin.Java)
