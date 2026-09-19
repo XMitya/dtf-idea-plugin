@@ -5,6 +5,9 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiField
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiModifier
+import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.search.searches.MethodReferencesSearch
+import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.InheritanceUtil
 import com.xmitya.ideadtf.DtfFqns
 import org.jetbrains.uast.UCallExpression
@@ -133,6 +136,18 @@ object DtfTaskDefResolver {
         }
         return anchors.toList()
     }
+
+    /**
+     * Every reference to one of the anchors [anchorsFor] produced.
+     *
+     * Kotlin's synthetic-property access (`task.def`) is only reachable through the method-
+     * references search, not the plain reference search.
+     */
+    fun referencesTo(anchor: PsiElement, scope: GlobalSearchScope): List<PsiElement> =
+        when (anchor) {
+            is PsiMethod -> MethodReferencesSearch.search(anchor, scope, true).findAll()
+            else -> ReferencesSearch.search(anchor, scope).findAll()
+        }.map { it.element }
 
     /**
      * Digs the call out of an expression.

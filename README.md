@@ -3,9 +3,9 @@
 Editor support for the [Distributed Task Framework](https://github.com/cherkovskiyandrey/distributed-task-framework)
 (DTF).
 
-Marks every class that implements `com.distributed_task_framework.task.Task` with a gutter icon, and
-lets you jump from the task to every place it is scheduled. Works for Java and Kotlin sources, and
-needs only IntelliJ IDEA Community — no Ultimate features are used.
+Navigates between a DTF task and the places it is scheduled, in both directions, from a gutter icon.
+Works for Java and Kotlin sources, and needs only IntelliJ IDEA Community — no Ultimate features are
+used.
 
 ## Installing
 
@@ -36,7 +36,13 @@ This plugin puts a **T** icon next to the task class. Clicking it searches the p
 every scheduling site, with the enclosing method, its class and `file:line`; picking one navigates
 straight to that call. A single result navigates immediately.
 
-The search runs on click, under a cancellable progress dialog, never during highlighting.
+The same detour exists in reverse. Reading `schedule(SOME_TASK_DEF, ctx)` and wanting the task that
+actually runs means Go To Declaration on the constant, landing in a holder class, and Find Usages
+from there. So the call gets an icon of its own — the same **T**, with a red arrow down — that
+resolves the task and jumps to it. A definition shared by several tasks, or picked by a conditional,
+opens a popup naming each task, its definition and `file:line`.
+
+Both searches run on click, under a cancellable progress dialog, never during highlighting.
 
 ## What it recognises
 
@@ -65,6 +71,21 @@ never used as a signal, only the declared `TaskDef` type.
 Methods that take a `TaskDef` but do not launch anything — `cancelAllTaskByTaskDef`,
 `rescheduleByTaskDef`, `getRegisteredTask` — are deliberately not reported.
 
+**Schedule calls** — going the other way, a call is marked when the task can be named from the call
+site itself.
+
+| Shape | Resolves to |
+| --- | --- |
+| `schedule(ScanFileTask.SCAN_FILE, ctx)` | the task declaring the constant, with no search at all |
+| `schedule(TaskDefinitions.S3_MOVE, ctx)` | the task whose `getDef()` returns it — holder class, interface or Kotlin `object` alike |
+| A constant returned by two tasks | both of them |
+| `schedule(getDef(), ctx)` | the enclosing task; written in an abstract base, every concrete task below it |
+| `val d = if (x) A.DEF else B.DEF; schedule(d, ctx)` | *both* tasks |
+| `schedule(flag ? A.DEF : B.DEF, ctx)` | likewise, with no local to go through |
+| `sneakyScheduler.schedule(DEF, ctx)` | through the project-local wrapper |
+| `schedule(context = ctx, taskDef = DEF)` | Kotlin named arguments, in any order |
+| `sendVkNotificationTask.schedule(dto, key)` | the receiver's own type, no `TaskDef` in sight |
+
 ## Known limitations
 
 - **Dispatch that is not statically decidable** is not resolved: bean-selector registries
@@ -73,9 +94,19 @@ Methods that take a `TaskDef` but do not launch anything — `cancelAllTaskByTas
 - **A `TaskDef` passed into an abstract base as a constructor argument** yields no anchor. The icon
   still appears; the list is empty.
 - **A receiver typed as a shared base** (`anySchedulableTask.schedule(...)`) is not attributed to
-  any single task, because it could be any of them.
-- **Dataflow is two hops deep** by design — one through a local variable, one through a wrapper's
-  parameter.
+  any single task, because it could be any of them. Neither direction reports it.
+- **Reverse navigation needs the definition to be visible at the call.** Inside a wrapper's own
+  forward — `schedule(taskDef, ctx)`, where `taskDef` is the method's parameter — the task is
+  whatever the caller passed, so there is no icon. Reach that call from the task's own popup
+  instead: the forward direction crosses the wrapper boundary, this one stops at it.
+- **The reverse icon keys on the method name.** A wrapper called `launch(DEF, ctx)` is still found
+  going forward, which keys on the parameter type, but carries no icon going back — resolving every
+  call in the file during highlighting would not be worth it.
+- **A `TaskDef` built inline at the call site** (`schedule(TaskDef.privateTaskDef(name, …), ctx)`)
+  names no declaration, so there is nothing to navigate to.
+- **Dataflow is two hops deep** by design. Going forward that is one hop through a local variable
+  and one through a wrapper's parameter; coming back it is two chained locals, the wrapper
+  parameter being where the reverse direction stops rather than continues.
 - **Cron tasks** have no explicit call site. Where the plugin can tell (`@TaskSchedule`), it says so
   instead of reporting nothing found; cron configured in YAML is not read.
 - **Saga steps** (`@SagaMethod`) are a separate mechanism with no `TaskDef` in user code, and are

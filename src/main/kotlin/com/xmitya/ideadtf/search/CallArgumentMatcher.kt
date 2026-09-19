@@ -1,13 +1,17 @@
 package com.xmitya.ideadtf.search
 
+import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.util.InheritanceUtil
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.psi.util.PsiUtil
 import com.xmitya.ideadtf.DtfFqns
+import com.xmitya.ideadtf.model.DtfTaskModel
 import org.jetbrains.uast.UCallExpression
 import org.jetbrains.uast.UElement
 import org.jetbrains.uast.UExpression
+import org.jetbrains.uast.UReferenceExpression
 import org.jetbrains.uast.UVariable
 import org.jetbrains.uast.getUParentForIdentifier
 import org.jetbrains.uast.toUElementOfType
@@ -108,5 +112,30 @@ object CallArgumentMatcher {
         } else {
             null
         }
+    }
+
+    /**
+     * Whether [argument] is the task's own `getDef()`.
+     *
+     * Written as `getDef()` in Java and read as the `def` property in Kotlin, which resolves to the
+     * same accessor - hence matching the resolved method rather than the source text.
+     */
+    fun resolvesToGetDef(argument: UElement): Boolean {
+        val resolved = (argument as? UReferenceExpression)?.resolve()
+            ?: (argument as? UCallExpression)?.resolve()
+        return resolved is PsiMethod && resolved.name == DtfFqns.GET_DEF && resolved.parameterList.isEmpty
+    }
+
+    /**
+     * The task a call's receiver is declared as, if it is one.
+     *
+     * Some bases expose their own `schedule(message)` and fill in the `TaskDef` internally, so the
+     * call mentions no definition at all and the receiver is the only thing naming the task. A
+     * receiver typed as the shared base is not one task and yields nothing.
+     */
+    fun receiverTask(call: UCallExpression): PsiClass? {
+        val receiverType = call.receiverType ?: return null
+        val psiClass = PsiUtil.resolveClassInClassTypeOnly(receiverType) ?: return null
+        return psiClass.takeIf { DtfTaskModel.isMarkableTask(it) }
     }
 }
