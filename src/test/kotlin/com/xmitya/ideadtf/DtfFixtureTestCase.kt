@@ -1,5 +1,8 @@
 package com.xmitya.ideadtf
 
+import com.intellij.psi.JavaPsiFacade
+import com.intellij.psi.PsiClass
+import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.testFramework.LightProjectDescriptor
 import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
 
@@ -102,4 +105,10 @@ abstract class DtfFixtureTestCase : LightJavaCodeInsightFixtureTestCase() {
             """.trimIndent(),
         )
     }
+
+    /** The class under test, by short or qualified name. */
+    protected fun findClass(name: String): PsiClass =
+        requireNotNull(
+            JavaPsiFacade.getInstance(project).findClass(name, GlobalSearchScope.allScope(project))
+        ) { "class $name not found" }
 }
