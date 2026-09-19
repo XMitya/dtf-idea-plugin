@@ -13,6 +13,9 @@
         <p>Tasks the framework launches on a schedule - through <code>@TaskSchedule</code> or a
         <code>cron</code> in <code>application.yaml</code>/<code>.properties</code> - are marked with a clock
         instead, which opens the place the schedule is configured.</p>
+        <p>A <b>DTF Tasks</b> tool window lists every task in the project as a tree of project, module and
+        task, named by its <code>TaskDef</code> and carrying the same icons as the gutter; double-click or
+        Enter opens the task.</p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
@@ -37,6 +40,17 @@
                                         implementationClass="com.xmitya.ideadtf.marker.DtfScheduleCallLineMarkerProvider"/>
         <!-- Filters on the file extension, so it needs no dependency on the Properties plugin. -->
         <fileBasedIndex implementation="com.xmitya.ideadtf.cron.properties.DtfCronPropertiesIndex"/>
+
+        <!-- The id doubles as the stripe label. The icon names the classic 13x13 path; the mapping
+             file below redirects it to the new UI's icons/expui variants, where the stripe picks up
+             the @20x20 one by itself. -->
+        <toolWindow id="DTF Tasks"
+                    anchor="left"
+                    doNotActivateOnStart="true"
+                    icon="com.xmitya.ideadtf.DtfIcons.ToolWindow"
+                    factoryClass="com.xmitya.ideadtf.toolwindow.DtfTaskToolWindowFactory"/>
+        <iconMapper mappingFile="DtfIconMappings.json"/>
+        <postStartupActivity implementation="com.xmitya.ideadtf.toolwindow.DtfToolWindowActivity"/>
     </extensions>
 
     <extensions defaultExtensionNs="com.xmitya.ideadtf">

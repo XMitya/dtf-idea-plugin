@@ -42,6 +42,12 @@ kotlin {
     compilerOptions {
         apiVersion.set(KotlinVersion.KOTLIN_2_1)
         languageVersion.set(KotlinVersion.KOTLIN_2_1)
+        // Inherit the platform's interface defaults instead of re-emitting them. Without this,
+        // implementing a Kotlin interface such as ToolWindowFactory materialises an override of
+        // every default method it has - getIcon, getAnchor, manage - and the plugin verifier fails
+        // the build on internal-API usages that nobody wrote. The platform ships no DefaultImpls
+        // for those interfaces, so there is nothing to stay compatible with.
+        freeCompilerArgs.add("-Xjvm-default=all")
     }
 }
 

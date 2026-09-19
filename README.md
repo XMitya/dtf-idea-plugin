@@ -4,8 +4,9 @@ Editor support for the [Distributed Task Framework](https://github.com/cherkovsk
 (DTF).
 
 Navigates between a DTF task and the places it is scheduled, in both directions, from a gutter icon,
-and marks the tasks the framework launches on a schedule. Works for Java and Kotlin sources, and
-needs only IntelliJ IDEA Community — no Ultimate features are used.
+marks the tasks the framework launches on a schedule, and lists every task in the project in a tool
+window of its own. Works for Java and Kotlin sources, and needs only IntelliJ IDEA Community — no
+Ultimate features are used.
 
 ## Installing
 
@@ -48,6 +49,15 @@ Where several profiles configure the same task, all of them are listed, each sho
 expression, so the one that is actually switched off is visible rather than assumed.
 
 Both searches run on click, under a cancellable progress dialog, never during highlighting.
+
+Those three icons each answer a question about one task you are already looking at. The **DTF Tasks**
+tool window answers the one they cannot — *which tasks are there at all* — as a tree of project,
+module and task. Each row is named by its `TaskDef` and carries the icon it has in the gutter, with
+the class name and, for a cron task, the expression beside it in grey; double-click or Enter opens
+the task. Typing finds a task or a module by name, reaching into collapsed modules, so nothing has
+to be opened first. The stripe button appears only in projects that have DTF on the classpath. The scan runs
+when the panel is first opened, and again when it is shown after the project has changed — so
+returning to it costs nothing when nothing has moved.
 
 ## What it recognises
 
@@ -153,6 +163,13 @@ file are searched separately, which is how profiles are usually written.
   switched off the plugin still loads and falls back to `@TaskSchedule` alone.
 - **The clock replaces the T**, so a cron task that is *also* scheduled explicitly no longer offers
   its list of call sites.
+- **The tool window lists project sources only.** A task arriving as a binary dependency has no
+  source to open and would be a row you cannot click, so it is left out — the same scope every other
+  search here uses.
+- **The tree groups by module**, and a task belonging to no module falls into a trailing *Outside
+  modules* group. Modules without tasks are not shown at all.
+- **The tree refreshes when the panel is shown**, not while you type. A project-wide search on every
+  keystroke is not worth the accuracy; the toolbar has a Refresh button for the impatient.
 - **Saga steps** (`@SagaMethod`) are a separate mechanism with no `TaskDef` in user code, and are
   not covered.
 
@@ -215,3 +232,10 @@ updates to a plugin that already exists.
 `TargetPresentation`, used to render the popup entries, is marked experimental by the platform. It
 is the API the IDE's own "go to target" popups use, and the verifier reports no compatibility
 problems; the alternative was an internal API.
+
+The build passes `-Xjvm-default=all`. Implementing a Kotlin interface from the platform — such as
+`ToolWindowFactory` — otherwise materialises an override of every default method it declares, and
+the plugin verifier fails the build on internal-API usages that appear nowhere in the source. The
+platform ships no `DefaultImpls` for those interfaces, so there is nothing to stay compatible with.
+`DtfTaskToolWindowTest` asserts the flag is still in effect, because only the verifier would notice
+otherwise.
