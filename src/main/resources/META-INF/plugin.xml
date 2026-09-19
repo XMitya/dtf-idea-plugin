@@ -15,5 +15,8 @@
     <depends>com.intellij.java</depends>
 
     <extensions defaultExtensionNs="com.intellij">
+        <!-- language="UAST" dispatches for every language with a UAST plugin, i.e. Java and Kotlin. -->
+        <codeInsight.lineMarkerProvider language="UAST"
+                                        implementationClass="com.xmitya.ideadtf.marker.DtfTaskLineMarkerProvider"/>
     </extensions>
 </idea-plugin>
