@@ -1,6 +1,7 @@
 package com.xmitya.ideadtf
 
 import com.intellij.codeInsight.daemon.GutterMark
+import com.intellij.codeInsight.daemon.LineMarkerInfo
 
 /** The icon side of the reverse feature: which call sites get marked as scheduling a task. */
 class DtfScheduleGutterTest : DtfFixtureTestCase() {
@@ -278,6 +279,62 @@ class DtfScheduleGutterTest : DtfFixtureTestCase() {
             """.trimIndent(),
         )
         assertEmpty(scheduleGutters())
+    }
+
+    /** The icon is only useful if it is wired to the navigation handler. */
+    fun testMarkerIsClickableAndAnchorsOnTheMethodName() {
+        addJavaTask()
+        myFixture.configureByText(
+            "Caller.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+            import com.distributed_task_framework.service.DistributedTaskService;
+
+            public class Caller {
+                private DistributedTaskService distributedTaskService;
+
+                public void run() throws Exception {
+                    distributedTaskService.schedule(HelloTask.HELLO, ExecutionContext.simple("x"));
+                }
+            }
+            """.trimIndent(),
+        )
+        val marker = myFixture.findAllGutters()
+            .filterIsInstance<LineMarkerInfo.LineMarkerGutterIconRenderer<*>>()
+            .single { it.icon === DtfIcons.ScheduleGutter }
+            .lineMarkerInfo
+        assertNotNull(marker.navigationHandler)
+        assertEquals(DtfBundle.message("dtf.gutter.schedule.tooltip"), marker.lineMarkerTooltip)
+        assertEquals("schedule", marker.element?.text)
+    }
+
+    /** A task that schedules itself carries both icons, and they must not be confused. */
+    fun testTaskClassAndScheduleCallGetDistinctIcons() {
+        myFixture.configureByText(
+            "SelfTask.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+            import com.distributed_task_framework.model.TaskDef;
+            import com.distributed_task_framework.service.DistributedTaskService;
+            import com.distributed_task_framework.task.Task;
+
+            public class SelfTask implements Task<String> {
+                public static final TaskDef<String> SELF = TaskDef.privateTaskDef("SELF", String.class);
+
+                private DistributedTaskService distributedTaskService;
+
+                @Override
+                public TaskDef<String> getDef() { return SELF; }
+
+                @Override
+                public void execute(ExecutionContext<String> ctx) throws Exception {
+                    distributedTaskService.schedule(getDef(), ctx);
+                }
+            }
+            """.trimIndent(),
+        )
+        assertEquals(1, myFixture.findAllGutters().filter { it.icon === DtfIcons.TaskGutter }.size)
+        assertEquals(1, scheduleGutters().size)
     }
 
     private fun addJavaTask() {

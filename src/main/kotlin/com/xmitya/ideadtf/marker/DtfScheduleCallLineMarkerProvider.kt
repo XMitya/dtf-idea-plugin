@@ -34,7 +34,7 @@ class DtfScheduleCallLineMarkerProvider : LineMarkerProviderDescriptor() {
             element.textRange,
             DtfIcons.ScheduleGutter,
             { DtfBundle.message("dtf.gutter.schedule.tooltip") },
-            null,
+            TaskTargetsNavigationHandler(),
             GutterIconRenderer.Alignment.LEFT,
             { DtfBundle.message("dtf.gutter.schedule.name") },
         )

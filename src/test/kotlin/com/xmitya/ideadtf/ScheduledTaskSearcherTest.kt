@@ -4,6 +4,7 @@ import com.intellij.openapi.application.ReadAction
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiRecursiveElementWalkingVisitor
 import com.xmitya.ideadtf.marker.DtfScheduleMarkers
+import com.xmitya.ideadtf.search.ScheduleCallSearcher
 import com.xmitya.ideadtf.search.ScheduledTaskSearcher
 
 /** Finding the task behind a schedule call, across the shapes the first argument takes. */
@@ -233,6 +234,48 @@ class ScheduledTaskSearcherTest : DtfFixtureTestCase() {
             }
             """.trimIndent(),
         )
+    }
+
+    /**
+     * The two directions have to agree: every task this call resolves to must list this very call
+     * among its own schedule sites. They resolve through different paths, so nothing but a test
+     * stops them drifting apart.
+     */
+    fun testRoundTripAgreesWithTheForwardSearch() {
+        addTwoTasks()
+        myFixture.configureByText(
+            "Listener.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+            import com.distributed_task_framework.model.TaskDef;
+            import com.distributed_task_framework.service.DistributedTaskService;
+
+            public class Listener {
+                private DistributedTaskService distributedTaskService;
+
+                public void onEvent(boolean flag) throws Exception {
+                    TaskDef<String> taskDef = flag ? HelloTask.HELLO : OtherTask.OTHER;
+                    distributedTaskService.schedule(taskDef, ExecutionContext.simple("x"));
+                }
+            }
+            """.trimIndent(),
+        )
+
+        ReadAction.run<RuntimeException> {
+            val call = leavesOf(myFixture.file).firstNotNullOf { DtfScheduleMarkers.scheduleCallAt(it) }
+            val callOffset = call.sourcePsi!!.textRange.startOffset
+            val tasks = ScheduledTaskSearcher(project).findTasks(call)
+            assertEquals(listOf("HelloTask", "OtherTask"), tasks.map { it.qualifiedName })
+
+            val forward = ScheduleCallSearcher(project)
+            for (task in tasks) {
+                val sites = forward.findScheduleSites(task)
+                assertTrue(
+                    "the forward search for " + task.name + " lost this call, found " + sites.map { it.element.text },
+                    sites.any { it.element.textRange.startOffset == callOffset },
+                )
+            }
+        }
     }
 
     /** The tasks resolved for the only schedule call in the file under the caret. */
