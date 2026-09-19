@@ -49,7 +49,9 @@ class DtfTaskTreePanel(private val project: Project) : SimpleToolWindowPanel(tru
         tree.selectionModel.selectionMode = TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION
         tree.cellRenderer = DtfTaskTreeRenderer()
         tree.emptyText.text = DtfBundle.message("dtf.toolwindow.progress")
-        TreeSpeedSearch.installOn(tree)
+        // canExpand: most modules are collapsed, so searching only the visible rows would
+        // find no task at all. The text function is not optional - see DtfTaskTreeSearchText.
+        TreeSpeedSearch.installOn(tree, true) { DtfTaskTreeSearchText.of(it) }
         // Two handlers because they resolve the target differently: double-click reads the node's
         // user object, Enter reads NAVIGATABLE_ARRAY out of the data context below.
         EditSourceOnDoubleClickHandler.install(tree)

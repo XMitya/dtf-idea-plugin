@@ -54,7 +54,8 @@ Those three icons each answer a question about one task you are already looking 
 tool window answers the one they cannot — *which tasks are there at all* — as a tree of project,
 module and task. Each row is named by its `TaskDef` and carries the icon it has in the gutter, with
 the class name and, for a cron task, the expression beside it in grey; double-click or Enter opens
-the task. The stripe button appears only in projects that have DTF on the classpath. The scan runs
+the task. Typing finds a task or a module by name, reaching into collapsed modules, so nothing has
+to be opened first. The stripe button appears only in projects that have DTF on the classpath. The scan runs
 when the panel is first opened, and again when it is shown after the project has changed — so
 returning to it costs nothing when nothing has moved.
 
