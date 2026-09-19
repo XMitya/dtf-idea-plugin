@@ -232,3 +232,10 @@ updates to a plugin that already exists.
 `TargetPresentation`, used to render the popup entries, is marked experimental by the platform. It
 is the API the IDE's own "go to target" popups use, and the verifier reports no compatibility
 problems; the alternative was an internal API.
+
+The build passes `-Xjvm-default=all`. Implementing a Kotlin interface from the platform — such as
+`ToolWindowFactory` — otherwise materialises an override of every default method it declares, and
+the plugin verifier fails the build on internal-API usages that appear nowhere in the source. The
+platform ships no `DefaultImpls` for those interfaces, so there is nothing to stay compatible with.
+`DtfTaskToolWindowTest` asserts the flag is still in effect, because only the verifier would notice
+otherwise.

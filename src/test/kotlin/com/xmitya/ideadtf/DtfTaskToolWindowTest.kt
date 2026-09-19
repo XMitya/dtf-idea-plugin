@@ -19,6 +19,21 @@ class DtfTaskToolWindowTest : DtfFixtureTestCase() {
         assertEquals("left", bean.anchor)
     }
 
+    /**
+     * Guards the `-Xjvm-default=all` compiler flag.
+     *
+     * Without it the Kotlin compiler materialises an override of every default method of
+     * [ToolWindowFactory] - `getIcon`, `getAnchor`, `manage` - and the plugin verifier fails the
+     * build on six internal-API usages that are not in the source at all. Nothing else notices
+     * until CI runs the verifier.
+     */
+    fun testFactoryInheritsInterfaceDefaultsRatherThanRestatingThem() {
+        val declared = DtfTaskToolWindowFactory::class.java.declaredMethods.map { it.name }
+        for (inherited in listOf("getIcon", "getAnchor", "manage", "isApplicable", "isDoNotActivateOnStart")) {
+            assertFalse("-Xjvm-default=all is missing: $inherited was materialised", inherited in declared)
+        }
+    }
+
     fun testStripeButtonIsAvailableWhenDtfIsOnTheClasspath() {
         assertTrue(DtfTaskToolWindowFactory().shouldBeAvailable(project))
     }

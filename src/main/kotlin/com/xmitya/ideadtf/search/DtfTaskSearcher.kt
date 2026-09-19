@@ -28,7 +28,10 @@ class DtfTaskSearcher(private val project: Project) {
             ?: return emptyList()
 
         val found = LinkedHashMap<String, PsiClass>()
-        for (inheritor in ClassInheritorsSearch.search(taskInterface, GlobalSearchScope.projectScope(project), true)) {
+        // findAll() rather than iterating the Query: `for (x in query)` goes through
+        // Query.iterator(), which is deprecated and scheduled for removal.
+        val inheritors = ClassInheritorsSearch.search(taskInterface, GlobalSearchScope.projectScope(project), true)
+        for (inheritor in inheritors.findAll()) {
             ProgressManager.checkCanceled()
             if (!DtfTaskModel.isMarkableTask(inheritor)) continue
             // Keyed on the qualified name for the same reason as ScheduledTaskSearcher: a class is
