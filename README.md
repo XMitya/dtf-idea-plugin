@@ -7,6 +7,25 @@ Marks every class that implements `com.distributed_task_framework.task.Task` wit
 lets you jump from the task to every place it is scheduled. Works for Java and Kotlin sources, and
 needs only IntelliJ IDEA Community — no Ultimate features are used.
 
+## Installing
+
+**Get updates automatically.** Add this URL once under *Settings | Plugins | ⚙ | Manage Plugin
+Repositories…*:
+
+```
+https://github.com/XMitya/dtf-idea-plugin/releases/latest/download/updatePlugins.xml
+```
+
+The plugin then appears under *Marketplace* in the plugin dialog, and every new release arrives
+through the normal update flow. `releases/latest/download/` always resolves to the newest release,
+so the URL itself never changes.
+
+**Or install a single build.** Download the zip from
+[Releases](https://github.com/XMitya/dtf-idea-plugin/releases) and use *Settings | Plugins | ⚙ |
+Install Plugin from Disk…*.
+
+Built against 2025.2 (build 252) with no upper bound, so it loads in newer IDEs as well.
+
 ## What it does
 
 A DTF task is launched through `distributedTaskService.schedule(SOME_TASK_DEF, ctx)`, where the
@@ -71,10 +90,13 @@ Requires JDK 21.
 ./gradlew test            # fixture tests
 ./gradlew verifyPlugin    # IntelliJ Plugin Verifier
 ./gradlew runIde          # sandbox IDE with the plugin installed
+
+# custom-repository manifest, pointing at the directory that serves the zip
+./gradlew generateUpdatePluginsXml -PpluginBaseUrl=https://host/path
 ```
 
-Install the zip through *Settings | Plugins | ⚙ | Install Plugin from Disk…*. The plugin is built
-against 2025.2 (build 252) and has no upper bound, so it also loads in newer IDEs.
+`pluginVersion` from `gradle.properties` names the build; `-PpluginVersion=<v>` overrides it, which
+is how the release workflow keeps the zip in step with the tag.
 
 ### Behind a proxy
 
@@ -89,6 +111,29 @@ The fixture tests additionally need `org.jetbrains:annotations:24.0.0` and
 `org.jetbrains.mockjdk:mockjdk-base-java:21.0` in the local Maven repository. The IDE test framework
 downloads them itself given plain internet access; behind a proxy it cannot, and they have to be
 placed in `~/.m2/repository` by hand.
+
+## Releasing
+
+`.github/workflows/build.yml` tests, builds and verifies every push to `main` and every pull
+request.
+
+A release is cut by pushing a tag. The tag carries the version, so what the release page shows and
+what is inside the zip cannot disagree:
+
+```sh
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+`.github/workflows/release.yml` then builds at that version, generates the `updatePlugins.xml`
+manifest pointing at that release's own zip, and attaches both to the GitHub release — which is
+what makes the repository URL above serve updates. The same workflow can be started by hand from
+the Actions tab with a version instead of a tag.
+
+Publishing to the JetBrains Marketplace is wired up and skips itself until the `PUBLISH_TOKEN`,
+`CERTIFICATE_CHAIN`, `PRIVATE_KEY` and `PRIVATE_KEY_PASSWORD` repository secrets exist. The first
+version of a plugin has to go through the Marketplace web form in any case; the API only accepts
+updates to a plugin that already exists.
 
 ## Notes on the implementation
 
