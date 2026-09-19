@@ -74,6 +74,65 @@ class DtfTaskGutterTest : DtfFixtureTestCase() {
     }
 
     /** Matched on the icon: the tooltip varies with whether the task name could be resolved. */
+    fun testKotlinTaskIsMarked() {
+        myFixture.configureByText(
+            "ScanFileTask.kt",
+            """
+            import com.distributed_task_framework.model.TaskDef
+            import com.distributed_task_framework.task.Task
+
+            class ScanFileTask : Task<String> {
+                override fun getDef(): TaskDef<String> = SCAN_FILE
+
+                companion object {
+                    val SCAN_FILE: TaskDef<String> = TaskDef.privateTaskDef("SCAN_FILE", String::class.java)
+                }
+            }
+            """.trimIndent(),
+        )
+        assertEquals(1, taskGutters().size)
+    }
+
+    /** One Kotlin file routinely holds several tasks; each needs its own marker. */
+    fun testTwoTasksInOneKotlinFileAreBothMarked() {
+        myFixture.configureByText(
+            "LlmModerationWorkerTask.kt",
+            """
+            import com.distributed_task_framework.model.TaskDef
+            import com.distributed_task_framework.task.Task
+
+            class SpecialistTask : Task<String> {
+                override fun getDef(): TaskDef<String> = TaskDef.privateTaskDef("SPECIALIST", String::class.java)
+            }
+
+            class JudgeTask : Task<String> {
+                override fun getDef(): TaskDef<String> = TaskDef.privateTaskDef("JUDGE", String::class.java)
+            }
+            """.trimIndent(),
+        )
+        assertEquals(2, taskGutters().size)
+    }
+
+    /** A Kotlin companion object is not a task and must not pick up a marker of its own. */
+    fun testKotlinCompanionObjectIsNotMarkedSeparately() {
+        myFixture.configureByText(
+            "SingleMarkerTask.kt",
+            """
+            import com.distributed_task_framework.model.TaskDef
+            import com.distributed_task_framework.task.Task
+
+            class SingleMarkerTask : Task<String> {
+                override fun getDef(): TaskDef<String> = TASK_DEF
+
+                companion object {
+                    val TASK_DEF: TaskDef<String> = TaskDef.privateTaskDef("SINGLE", String::class.java)
+                }
+            }
+            """.trimIndent(),
+        )
+        assertEquals(1, taskGutters().size)
+    }
+
     /** The icon is only useful if it is wired to the navigation handler. */
     fun testMarkerIsClickableAndNamesTheTask() {
         myFixture.configureByText(

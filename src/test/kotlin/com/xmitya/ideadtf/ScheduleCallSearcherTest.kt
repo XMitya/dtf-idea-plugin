@@ -268,6 +268,90 @@ class ScheduleCallSearcherTest : DtfFixtureTestCase() {
         assertEquals(1, search("AppSitemapTask").size)
     }
 
+    /** Java ternary into a local, then handed to a private helper that forwards it. */
+    fun testJavaTernaryThroughPrivateHelper() {
+        addJavaTaskWithOwnConstant()
+        myFixture.addFileToProject(
+            "OtherTask.java",
+            """
+            import com.distributed_task_framework.model.TaskDef;
+            import com.distributed_task_framework.task.Task;
+
+            public class OtherTask implements Task<String> {
+                public static final TaskDef<String> OTHER = TaskDef.privateTaskDef("OTHER", String.class);
+
+                @Override
+                public TaskDef<String> getDef() { return OTHER; }
+            }
+            """.trimIndent(),
+        )
+        myFixture.addFileToProject(
+            "Listener.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+            import com.distributed_task_framework.model.TaskDef;
+            import com.distributed_task_framework.service.DistributedTaskService;
+
+            public class Listener {
+                private DistributedTaskService distributedTaskService;
+
+                public void onEvent(boolean flag) throws Exception {
+                    var taskDef = flag ? HelloTask.HELLO : OtherTask.OTHER;
+                    schedule(taskDef, "payload");
+                }
+
+                void schedule(TaskDef<String> taskDef, String payload) throws Exception {
+                    distributedTaskService.schedule(taskDef, ExecutionContext.simple(payload));
+                }
+            }
+            """.trimIndent(),
+        )
+        val hello = search("HelloTask")
+        val other = search("OtherTask")
+        assertEquals("expected the helper call for HelloTask, got " + hello.map { it.element.text }, 1, hello.size)
+        assertEquals("expected the helper call for OtherTask, got " + other.map { it.element.text }, 1, other.size)
+        assertTrue(hello.single().element.text.contains("schedule(taskDef"))
+    }
+
+    /**
+     * Kotlin named arguments put the TaskDef in second position in the source, which is exactly
+     * what indexing valueArguments would get wrong.
+     */
+    fun testKotlinNamedArguments() {
+        myFixture.addFileToProject(
+            "NamedTask.kt",
+            """
+            import com.distributed_task_framework.model.TaskDef
+            import com.distributed_task_framework.task.Task
+
+            class NamedTask : Task<String> {
+                override fun getDef(): TaskDef<String> = TASK_DEF
+                companion object {
+                    val TASK_DEF: TaskDef<String> = TaskDef.privateTaskDef("NAMED", String::class.java)
+                }
+            }
+            """.trimIndent(),
+        )
+        myFixture.addFileToProject(
+            "KotlinScheduler.kt",
+            """
+            import com.distributed_task_framework.model.ExecutionContext
+            import com.distributed_task_framework.model.TaskDef
+
+            class KotlinScheduler {
+                fun <T> schedule(taskDef: TaskDef<T>, context: ExecutionContext<T>) = Unit
+
+                fun run() {
+                    schedule(context = ExecutionContext.simple("x"), taskDef = NamedTask.TASK_DEF)
+                }
+            }
+            """.trimIndent(),
+        )
+        val sites = search("NamedTask")
+        assertEquals("got " + sites.map { it.element.text }, 1, sites.size)
+        assertEquals(ScheduleTier.WRAPPER, sites.single().tier)
+    }
+
     /**
      * A base class that exposes its own schedule() and fills in the TaskDef internally, so the call
      * site mentions no TaskDef at all.
