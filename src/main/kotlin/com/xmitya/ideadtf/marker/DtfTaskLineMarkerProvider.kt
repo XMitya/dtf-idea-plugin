@@ -6,9 +6,8 @@ import com.intellij.openapi.editor.markup.GutterIconRenderer
 import com.intellij.psi.PsiElement
 import com.xmitya.ideadtf.DtfBundle
 import com.xmitya.ideadtf.DtfIcons
+import com.xmitya.ideadtf.model.DtfTaskDefResolver
 import com.xmitya.ideadtf.model.DtfTaskModel
-import org.jetbrains.uast.UClass
-import org.jetbrains.uast.getUParentForIdentifier
 import javax.swing.Icon
 
 /**
@@ -29,24 +28,25 @@ class DtfTaskLineMarkerProvider : LineMarkerProviderDescriptor() {
     override fun getIcon(): Icon = DtfIcons.TaskGutter
 
     override fun getLineMarkerInfo(element: PsiElement): LineMarkerInfo<*>? {
-        // Markers must sit on a leaf; bail out before touching UAST, which is not free.
-        if (element.firstChild != null) return null
-
-        val uClass = getUParentForIdentifier(element) as? UClass ?: return null
-        // Only the class-name identifier, not every identifier inside the class.
-        if (uClass.uastAnchor?.sourcePsi !== element) return null
-
         if (!DtfTaskModel.isDtfPresent(element.project)) return null
-        if (!DtfTaskModel.isMarkableTask(uClass.javaPsi)) return null
+        DtfTaskMarkers.taskClassAt(element) ?: return null
 
         return LineMarkerInfo(
             element,
             element.textRange,
             DtfIcons.TaskGutter,
-            { DtfBundle.message("dtf.gutter.tooltip") },
-            null,
+            ::tooltipFor,
+            ScheduleSitesNavigationHandler(),
             GutterIconRenderer.Alignment.LEFT,
             { DtfBundle.message("dtf.gutter.name") },
         )
+    }
+
+    /** Resolved on hover rather than during the pass, so the task name costs nothing up front. */
+    private fun tooltipFor(element: PsiElement): String {
+        val taskClass = DtfTaskMarkers.taskClassAt(element) ?: return DtfBundle.message("dtf.gutter.tooltip")
+        val taskName = DtfTaskDefResolver.resolve(taskClass).taskName
+            ?: return DtfBundle.message("dtf.gutter.tooltip")
+        return DtfBundle.message("dtf.gutter.tooltip.named", taskName)
     }
 }

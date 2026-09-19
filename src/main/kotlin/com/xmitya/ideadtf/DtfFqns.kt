@@ -21,6 +21,12 @@ object DtfFqns {
 
     const val DISTRIBUTED_TASK_SERVICE = "com.distributed_task_framework.service.DistributedTaskService"
 
+    /**
+     * Marks a task the framework launches on a cron schedule, so it can legitimately have no
+     * explicit call site.
+     */
+    const val TASK_SCHEDULE_ANNOTATION = "com.distributed_task_framework.autoconfigure.annotation.TaskSchedule"
+
     /** The name of the accessor that hands out a task's [TASK_DEF]. */
     const val GET_DEF = "getDef"
 
