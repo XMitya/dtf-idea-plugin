@@ -248,6 +248,38 @@ class DtfScheduleGutterTest : DtfFixtureTestCase() {
         assertEquals(1, scheduleGutters().size)
     }
 
+    /**
+     * A constructor is a call too, and a type named for scheduling that takes a TaskDef first is
+     * indistinguishable from a wrapper on everything except the kind of call it is.
+     */
+    fun testConstructorNamedLikeASchedulerIsNotMarked() {
+        addJavaTask()
+        myFixture.addFileToProject(
+            "ScheduleRequest.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+            import com.distributed_task_framework.model.TaskDef;
+
+            public class ScheduleRequest<T> {
+                public ScheduleRequest(TaskDef<T> taskDef, ExecutionContext<T> ctx) {}
+            }
+            """.trimIndent(),
+        )
+        myFixture.configureByText(
+            "Builder.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+
+            public class Builder {
+                public Object build() {
+                    return new ScheduleRequest<>(HelloTask.HELLO, ExecutionContext.simple("x"));
+                }
+            }
+            """.trimIndent(),
+        )
+        assertEmpty(scheduleGutters())
+    }
+
     private fun addJavaTask() {
         myFixture.addFileToProject(
             "HelloTask.java",

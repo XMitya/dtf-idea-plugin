@@ -12,7 +12,9 @@ import org.jetbrains.uast.UCallExpression
 import org.jetbrains.uast.UElement
 import org.jetbrains.uast.UExpression
 import org.jetbrains.uast.UReferenceExpression
+import org.jetbrains.uast.UastCallKind
 import org.jetbrains.uast.getUParentForIdentifier
+import org.jetbrains.uast.nonStructuralChildren
 import org.jetbrains.uast.toUElement
 
 /**
@@ -45,6 +47,9 @@ object DtfScheduleMarkers {
         if (!element.text.startsWith(SCHEDULE_PREFIX, ignoreCase = true)) return null
 
         val call = callAt(element) ?: return null
+        // A Kotlin constructor is a UCallExpression too, and `ScheduleRequest(DEF, ctx)` otherwise
+        // looks exactly like a wrapper: named for scheduling, TaskDef first.
+        if (call.kind != UastCallKind.METHOD_CALL) return null
         if (!isMethodNameOf(call, element)) return null
         return call.takeIf { identifiesATask(it) }
     }
@@ -92,7 +97,9 @@ object DtfScheduleMarkers {
         val method = call.resolve() ?: return false
         if (CallArgumentMatcher.classify(method) == null) return false
         val argument = call.getArgumentForParameter(0) ?: return false
-        return isTaskDefDeclaration(argument)
+        // The definition can be chosen inline - `schedule(flag ? A.DEF : B.DEF, ctx)` - so the
+        // conditional has to be unwrapped before anything can be resolved.
+        return nonStructuralChildren(argument).anyMatch { isTaskDefDeclaration(it) }
     }
 
     private fun isTaskDefDeclaration(argument: UExpression): Boolean {

@@ -113,6 +113,128 @@ class ScheduledTaskSearcherTest : DtfFixtureTestCase() {
         assertEquals(listOf("SelfTask"), tasksForSingleCall())
     }
 
+    /** A ternary straight in the argument, with no local variable to hang the branches on. */
+    fun testConditionalArgumentResolvesToBothTasks() {
+        addTwoTasks()
+        myFixture.configureByText(
+            "Listener.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+            import com.distributed_task_framework.service.DistributedTaskService;
+
+            public class Listener {
+                private DistributedTaskService distributedTaskService;
+
+                public void onEvent(boolean flag) throws Exception {
+                    distributedTaskService.schedule(
+                        flag ? HelloTask.HELLO : OtherTask.OTHER,
+                        ExecutionContext.simple("x"));
+                }
+            }
+            """.trimIndent(),
+        )
+        assertEquals(listOf("HelloTask", "OtherTask"), tasksForSingleCall())
+    }
+
+    /** A definition can be passed from local to local; two hops is the budget. */
+    fun testChainedLocalVariables() {
+        addTwoTasks()
+        myFixture.configureByText(
+            "Relay.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+            import com.distributed_task_framework.model.TaskDef;
+            import com.distributed_task_framework.service.DistributedTaskService;
+
+            public class Relay {
+                private DistributedTaskService distributedTaskService;
+
+                public void run() throws Exception {
+                    TaskDef<String> first = HelloTask.HELLO;
+                    TaskDef<String> second = first;
+                    distributedTaskService.schedule(second, ExecutionContext.simple("x"));
+                }
+            }
+            """.trimIndent(),
+        )
+        assertEquals(listOf("HelloTask"), tasksForSingleCall())
+    }
+
+    /** One constant in a holder can be the identity of more than one task; list them all. */
+    fun testSharedHolderConstantBelongsToEveryTaskThatReturnsIt() {
+        myFixture.addFileToProject(
+            "TaskDefinitions.java",
+            """
+            import com.distributed_task_framework.model.TaskDef;
+
+            public final class TaskDefinitions {
+                public static final TaskDef<String> SHARED = TaskDef.privateTaskDef("SHARED", String.class);
+            }
+            """.trimIndent(),
+        )
+        for (name in listOf("FirstTask", "SecondTask")) {
+            myFixture.addFileToProject(
+                "$name.java",
+                """
+                import com.distributed_task_framework.model.TaskDef;
+                import com.distributed_task_framework.task.Task;
+
+                public class $name implements Task<String> {
+                    @Override
+                    public TaskDef<String> getDef() { return TaskDefinitions.SHARED; }
+                }
+                """.trimIndent(),
+            )
+        }
+        myFixture.configureByText(
+            "SharedCaller.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+            import com.distributed_task_framework.service.DistributedTaskService;
+
+            public class SharedCaller {
+                private DistributedTaskService distributedTaskService;
+
+                public void run() throws Exception {
+                    distributedTaskService.schedule(TaskDefinitions.SHARED, ExecutionContext.simple("x"));
+                }
+            }
+            """.trimIndent(),
+        )
+        assertEquals(listOf("FirstTask", "SecondTask"), tasksForSingleCall())
+    }
+
+    private fun addTwoTasks() {
+        myFixture.addFileToProject(
+            "HelloTask.java",
+            """
+            import com.distributed_task_framework.model.TaskDef;
+            import com.distributed_task_framework.task.Task;
+
+            public class HelloTask implements Task<String> {
+                public static final TaskDef<String> HELLO = TaskDef.privateTaskDef("HELLO_TASK", String.class);
+
+                @Override
+                public TaskDef<String> getDef() { return HELLO; }
+            }
+            """.trimIndent(),
+        )
+        myFixture.addFileToProject(
+            "OtherTask.java",
+            """
+            import com.distributed_task_framework.model.TaskDef;
+            import com.distributed_task_framework.task.Task;
+
+            public class OtherTask implements Task<String> {
+                public static final TaskDef<String> OTHER = TaskDef.privateTaskDef("OTHER", String.class);
+
+                @Override
+                public TaskDef<String> getDef() { return OTHER; }
+            }
+            """.trimIndent(),
+        )
+    }
+
     /** The tasks resolved for the only schedule call in the file under the caret. */
     private fun tasksForSingleCall(): List<String> {
         val calls = allCalls()

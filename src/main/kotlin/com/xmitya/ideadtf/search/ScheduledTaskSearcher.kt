@@ -33,8 +33,14 @@ import org.jetbrains.uast.toUElementOfType
  */
 class ScheduledTaskSearcher(private val project: Project) {
 
-    /** One hop through a local variable, matching the budget the forward searcher spends. */
-    private val maxDepth = 1
+    /**
+     * How many local variables a definition may travel through before this gives up.
+     *
+     * Not the forward searcher's limit copied over: one of its two hops is the wrapper parameter,
+     * which in this direction is where resolution stops rather than continues. Two here means two
+     * chained locals.
+     */
+    private val maxDepth = 2
 
     fun findTasks(call: UCallExpression): List<PsiClass> {
         val found = LinkedHashMap<String, PsiClass>()
@@ -47,10 +53,13 @@ class ScheduledTaskSearcher(private val project: Project) {
     }
 
     /**
-     * The task named by a single `TaskDef` expression.
+     * The tasks named by a `TaskDef` expression.
      *
-     * The three shapes, in the order they are cheapest to decide: the task's own `getDef()`, a
-     * local variable standing in for a definition, and a reference to the definition itself.
+     * [nonStructuralChildren] comes first, not inside the local-variable branch: the definition is
+     * just as often chosen inline, as `schedule(flag ? A.DEF : B.DEF, ctx)`, with no variable to
+     * hang the branches on. Unwrapping here means a conditional is reported for both tasks
+     * wherever it appears - which is the mirror of the forward direction reporting one call site
+     * under two tasks.
      */
     private fun collectFrom(
         argument: UExpression,
@@ -59,6 +68,21 @@ class ScheduledTaskSearcher(private val project: Project) {
         scope: GlobalSearchScope,
     ) {
         if (depth > maxDepth) return
+        for (child in nonStructuralChildren(argument)) {
+            collectFromSingle(child, found, depth, scope)
+        }
+    }
+
+    /**
+     * One branch of [collectFrom], in the order the shapes are cheapest to decide: the task's own
+     * `getDef()`, a local variable standing in for a definition, and the definition itself.
+     */
+    private fun collectFromSingle(
+        argument: UExpression,
+        found: MutableMap<String, PsiClass>,
+        depth: Int,
+        scope: GlobalSearchScope,
+    ) {
         ProgressManager.checkCanceled()
 
         if (CallArgumentMatcher.resolvesToGetDef(argument)) {
@@ -93,9 +117,8 @@ class ScheduledTaskSearcher(private val project: Project) {
     /**
      * A local variable: read its initializer and carry on.
      *
-     * [nonStructuralChildren] unwraps blocks, parentheses and conditionals, so a Java ternary or a
-     * Kotlin `if` contributes both branches and the call is reported for both tasks - the same way
-     * the forward direction reports one call site under two tasks.
+     * The initializer goes back through [collectFrom], which unwraps a conditional the same way it
+     * does one written straight into the argument.
      */
     private fun collectFromLocal(
         variable: PsiLocalVariable,
@@ -107,9 +130,7 @@ class ScheduledTaskSearcher(private val project: Project) {
             ?: variable.navigationElement?.takeIf { it.isValid }?.toUElementOfType<UVariable>()
             ?: return
         val initializer = uVariable.uastInitializer ?: return
-        for (child in nonStructuralChildren(initializer)) {
-            collectFrom(child, found, depth + 1, scope)
-        }
+        collectFrom(initializer, found, depth + 1, scope)
     }
 
     /**
