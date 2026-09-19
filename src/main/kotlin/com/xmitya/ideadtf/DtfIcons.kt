@@ -32,4 +32,15 @@ object DtfIcons {
      */
     @JvmField
     val CronGutter: Icon = IconLoader.getIcon("/icons/dtfCron.svg", DtfIcons::class.java)
+
+    /**
+     * Stripe button for the DTF Tasks tool window.
+     *
+     * The same circled letter as [TaskGutter], but an outline and monochrome: stripe icons sit next
+     * to the IDE's own and are recoloured with the theme, so a filled blue disc would shout. Three
+     * sizes ship - 13x13 for the classic stripe, and 16/20 under `icons/expui` for the new UI, which
+     * asks for 20x20 - wired together by `DtfIconMappings.json`.
+     */
+    @JvmField
+    val ToolWindow: Icon = IconLoader.getIcon("/icons/dtfToolWindow.svg", DtfIcons::class.java)
 }
