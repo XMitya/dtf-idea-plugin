@@ -1,15 +1,12 @@
 package com.xmitya.ideadtf.marker
 
-import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiParameter
 import com.intellij.psi.PsiVariable
 import com.intellij.psi.util.InheritanceUtil
 import com.intellij.psi.util.PsiTreeUtil
-import com.intellij.psi.util.PsiUtil
 import com.xmitya.ideadtf.DtfFqns
-import com.xmitya.ideadtf.model.DtfTaskModel
 import com.xmitya.ideadtf.search.CallArgumentMatcher
 import org.jetbrains.uast.UCallExpression
 import org.jetbrains.uast.UElement
@@ -52,16 +49,6 @@ object DtfScheduleMarkers {
         return call.takeIf { identifiesATask(it) }
     }
 
-    /** The task the receiver is declared as, for bases that schedule themselves. */
-    fun receiverTask(call: UCallExpression): PsiClass? {
-        val receiverType = call.receiverType ?: return null
-        val psiClass = PsiUtil.resolveClassInClassTypeOnly(receiverType) ?: return null
-        return psiClass.takeIf { DtfTaskModel.isMarkableTask(it) }
-    }
-
-    /** Argument 0 of [call], which is where every DTF scheduling method takes its `TaskDef`. */
-    fun taskDefArgument(call: UCallExpression): UExpression? = call.getArgumentForParameter(0)
-
     /**
      * The call [element] belongs to.
      *
@@ -101,10 +88,10 @@ object DtfScheduleMarkers {
      * framework-internal `schedule(TaskEntity)` out, its argument being no `TaskDef` at all.
      */
     private fun identifiesATask(call: UCallExpression): Boolean {
-        if (receiverTask(call) != null) return true
+        if (CallArgumentMatcher.receiverTask(call) != null) return true
         val method = call.resolve() ?: return false
         if (CallArgumentMatcher.classify(method) == null) return false
-        val argument = taskDefArgument(call) ?: return false
+        val argument = call.getArgumentForParameter(0) ?: return false
         return isTaskDefDeclaration(argument)
     }
 

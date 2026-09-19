@@ -10,7 +10,6 @@ import com.intellij.psi.PsiModifier
 import com.intellij.psi.util.InheritanceUtil
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.MethodReferencesSearch
-import com.intellij.psi.search.searches.ReferencesSearch
 import com.xmitya.ideadtf.DtfFqns
 import com.xmitya.ideadtf.model.DtfTaskDefResolver
 import org.jetbrains.uast.UCallExpression
@@ -44,21 +43,13 @@ class ScheduleCallSearcher(private val project: Project) {
 
         val taskDef = DtfTaskDefResolver.resolve(taskClass)
         for (anchor in taskDef.anchors) {
-            collectFrom(referencesTo(anchor, scope), found, depth = 0, scope = scope)
+            collectFrom(DtfTaskDefResolver.referencesTo(anchor, scope), found, depth = 0, scope = scope)
         }
         collectSelfSchedules(taskClass, found)
         collectSchedulableBeanCalls(taskClass, found, scope)
 
         return found.values.sortedWith(compareBy({ it.tier.ordinal }, { it.key.first }, { it.key.second }))
     }
-
-    private fun referencesTo(anchor: PsiElement, scope: GlobalSearchScope): List<PsiElement> =
-        when (anchor) {
-            // Kotlin's synthetic-property access (`task.def`) is only reachable through the
-            // method-references search, not the plain reference search.
-            is PsiMethod -> MethodReferencesSearch.search(anchor, scope, true).findAll()
-            else -> ReferencesSearch.search(anchor, scope).findAll()
-        }.map { it.element }
 
     /**
      * Turns raw references into call sites, following at most [maxDepth] hops of trivial dataflow.
