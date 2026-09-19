@@ -58,7 +58,9 @@ class ScheduleSitesNavigationHandler : GutterIconNavigationHandler<PsiElement> {
         } else {
             DtfBundle.message("dtf.popup.title", sites.size)
         }
-        createTargetPopup(title, sites, { it.presentation }, { it.navigate() })
+        // The overload taking presentations as a parallel list, rather than the one taking a
+        // function: that one is marked internal API.
+        createTargetPopup(title, sites, sites.map { it.presentation }) { it.navigate() }
             .show(RelativePoint(event))
     }
 

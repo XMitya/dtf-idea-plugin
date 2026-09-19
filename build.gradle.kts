@@ -1,4 +1,5 @@
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
 plugins {
@@ -48,8 +49,32 @@ intellijPlatform {
             untilBuild = provider { null }
         }
     }
+
+    pluginVerification {
+        ides {
+            // The IDE we build against, rather than recommended(): the latter fetches the
+            // product-releases listing during configuration and needs another IDE download.
+            current()
+        }
+    }
 }
 
 tasks.test {
     useJUnit()
+}
+
+/**
+ * The verifier runs in a forked JVM and downloads from the Marketplace. Pass through whatever proxy
+ * settings this build was started with, so that it works behind a proxy without any host being
+ * written into the project. Supply them as usual, e.g.
+ * `./gradlew -Dhttps.proxyHost=... -Dhttps.proxyPort=... verifyPlugin`.
+ */
+tasks.withType<VerifyPluginTask>().configureEach {
+    val proxyProperties = listOf(
+        "http.proxyHost", "http.proxyPort", "http.nonProxyHosts",
+        "https.proxyHost", "https.proxyPort",
+    )
+    proxyProperties.forEach { key ->
+        System.getProperty(key)?.let { systemProperty(key, it) }
+    }
 }
