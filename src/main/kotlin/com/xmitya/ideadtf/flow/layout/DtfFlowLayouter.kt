@@ -21,6 +21,12 @@ class FlowEdgeRoute(
     val labelAnchor: FlowPoint,
     val labelSlot: FlowRect?,
     val reversed: Boolean,
+    /**
+     * Points where this arrow crosses one drawn before it, so the painter can hop over rather than
+     * through. Only one of any two crossing arrows carries the hop; otherwise both would bulge and
+     * the crossing would read as a knot.
+     */
+    val hops: List<FlowPoint> = emptyList(),
 )
 
 /**
@@ -82,9 +88,16 @@ object DtfFlowLayouter {
 
         val axisRects = place(columns, sizes, style, orientation)
         val totalAlong = axisRects.values.maxOfOrNull { it.along + it.alongSize } ?: 0
+        val natural = LinkedHashMap<String, FlowRect>()
+        axisRects.forEach { (id, rect) -> natural[id] = toRect(rect, orientation, totalAlong) }
+
+        // A task that reschedules itself loops over its own top, which for anything in the first row
+        // would be drawn above the canvas and simply disappear. The room is reserved here, from the
+        // arrangement alone, so that it does not depend on - and cannot drift with - dragged boxes.
+        val headroom = headroomFor(selfEdges, natural, style)
         val rects = LinkedHashMap<String, FlowRect>()
-        axisRects.forEach { (id, rect) ->
-            val placed = toRect(rect, orientation, totalAlong)
+        natural.forEach { (id, rect) ->
+            val placed = rect.translated(0, headroom)
             rects[id] = pinned[id]?.let { FlowRect(it.x, it.y, placed.width, placed.height) } ?: placed
         }
 
@@ -93,7 +106,37 @@ object DtfFlowLayouter {
             route(it, rects, columns.dummiesOf(it), reversed.contains(it.key), style, detached = moved)
         } + selfEdges.mapNotNull { selfRoute(it, rects[it.fromId], style) }
 
-        return DtfFlowLayout(rects, routes, sizeOf(rects, routes, style))
+        return DtfFlowLayout(rects, withLineJumps(routes), sizeOf(rects, routes, style))
+    }
+
+    /** How far everything has to come down so that no self-loop is drawn off the top of the canvas. */
+    private fun headroomFor(selfEdges: List<DtfFlowEdge>, rects: Map<String, FlowRect>, style: DtfFlowLayoutStyle): Int {
+        val highestLoop = selfEdges.mapNotNull { rects[it.fromId] }.minOfOrNull { it.y - loopHeightOf(it, style) } ?: return 0
+        return clampMin(style.padding - highestLoop, 0)
+    }
+
+    private fun loopHeightOf(rect: FlowRect, style: DtfFlowLayoutStyle): Int = rect.height / 2 + style.nodeGap / 2
+
+    /**
+     * Marks every place one arrow crosses another.
+     *
+     * The crossing belongs to whichever arrow is drawn later, so that exactly one of the pair hops.
+     * Quadratic in the number of segments, which is nothing at these sizes and is capped anyway -
+     * past [MAX_JUMP_EDGES] a diagram is unreadable for reasons no hop will fix.
+     */
+    private fun withLineJumps(routes: List<FlowEdgeRoute>): List<FlowEdgeRoute> {
+        if (routes.size > MAX_JUMP_EDGES) return routes
+        return routes.mapIndexed { index, route ->
+            val hops = mutableListOf<FlowPoint>()
+            for (earlier in 0 until index) {
+                for ((a1, a2) in route.points.zipWithNext()) {
+                    for ((b1, b2) in routes[earlier].points.zipWithNext()) {
+                        crossingOf(a1, a2, b1, b2)?.let { hops += it }
+                    }
+                }
+            }
+            if (hops.isEmpty()) route else FlowEdgeRoute(route.edge, route.points, route.labelAnchor, route.labelSlot, route.reversed, hops)
+        }
     }
 
     // --- step 1: break cycles -------------------------------------------------------------------
@@ -485,4 +528,6 @@ object DtfFlowLayouter {
     }
 
     private const val DUMMY = "dummy:"
+
+    private const val MAX_JUMP_EDGES = 250
 }

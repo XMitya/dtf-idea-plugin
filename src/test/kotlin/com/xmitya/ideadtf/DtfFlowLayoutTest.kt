@@ -136,6 +136,32 @@ class DtfFlowLayoutTest : UsefulTestCase() {
         assertEquals(furthest.right + style.padding, layout.size.width)
     }
 
+    /**
+     * A self-reschedule loops over the top of its box. With everything in one row there is nothing
+     * above it, so without room reserved the loop is drawn off the canvas and simply vanishes.
+     */
+    fun testASelfLoopInTheFirstRowIsNotClipped() {
+        val layout = layout(graph(listOf("a", "b"), edge("a", "b"), edge("a", "a")))
+
+        val loop = layout.edges.single { it.edge.isSelfLoop }
+        assertTrue("the loop is above the canvas: ${loop.points}", loop.points.all { it.y >= 0 })
+        assertTrue("every box must still be on the canvas", layout.nodes.values.all { it.y >= 0 })
+    }
+
+    /** The room is reserved once, from the arrangement, so laying out again does not creep downwards. */
+    fun testHeadroomIsStableAcrossRepeatedLayouts() {
+        val input = graph(listOf("a", "b"), edge("a", "b"), edge("a", "a"))
+
+        assertEquals(layout(input).nodes, layout(input).nodes)
+    }
+
+    /** No self-loop, no reserved room: an ordinary chain still starts at the padding. */
+    fun testAChainWithoutLoopsKeepsItsPadding() {
+        val layout = layout(graph(listOf("a", "b"), edge("a", "b")))
+
+        assertEquals(style.padding, layout.nodes.values.minOf { it.y })
+    }
+
     private fun layout(graph: DtfFlowGraph) = DtfFlowLayouter.layout(graph, graph.nodes.associate { it.id to boxSize }, style)
 
     private fun graph(ids: List<String>, vararg edges: DtfFlowEdge) = DtfFlowGraph("test", ids.map(::node), edges.toList())

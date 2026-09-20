@@ -75,6 +75,11 @@ Double-click opens what a box stands for: a task opens its class, calling code o
 Ctrl/Cmd with the wheel zooms, dragging the background pans, and the toolbar has *Fit Content* for
 when a module turns out larger than expected.
 
+Where one arrow crosses another it makes a small **bridge** over it, so that two lines passing and
+two lines meeting can be told apart at a glance — only one of any pair hops, or the crossing would
+read as a knot. *Layout* also switches between **square arrows** and **curved** ones; the bridges
+belong to the square style, since a semicircle on a curve reads as a kink rather than a crossing.
+
 Some crossings belong to the flow rather than to the arrangement — a task scheduled from six places
 will have six arrows into it however the boxes are placed — so there are two ways to untangle a
 diagram by hand. **Dragging a box** moves it and only it: everything else stays where the arrangement

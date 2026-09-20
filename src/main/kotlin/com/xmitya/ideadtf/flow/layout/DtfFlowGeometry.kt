@@ -1,7 +1,9 @@
 package com.xmitya.ideadtf.flow.layout
 
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
@@ -44,6 +46,35 @@ internal fun distanceToSegment(point: FlowPoint, from: FlowPoint, to: FlowPoint)
 }
 
 private fun hypotenuse(dx: Int, dy: Int): Double = sqrt((dx * dx + dy * dy).toDouble())
+
+/**
+ * Where two segments cross, if they properly cross at all.
+ *
+ * Null for parallel or collinear segments, and null when they only meet at an end - two arrows
+ * leaving the same box share that point by construction, and marking it as a crossing would put a
+ * hop on every fan-out.
+ */
+internal fun crossingOf(a1: FlowPoint, a2: FlowPoint, b1: FlowPoint, b2: FlowPoint): FlowPoint? {
+    val ax = (a2.x - a1.x).toDouble()
+    val ay = (a2.y - a1.y).toDouble()
+    val bx = (b2.x - b1.x).toDouble()
+    val by = (b2.y - b1.y).toDouble()
+
+    val denominator = ax * by - ay * bx
+    if (abs(denominator) < EPSILON) return null
+
+    val t = ((b1.x - a1.x) * by - (b1.y - a1.y) * bx) / denominator
+    val u = ((b1.x - a1.x) * ay - (b1.y - a1.y) * ax) / denominator
+    if (t <= ENDPOINT_MARGIN || t >= 1 - ENDPOINT_MARGIN) return null
+    if (u <= ENDPOINT_MARGIN || u >= 1 - ENDPOINT_MARGIN) return null
+
+    return FlowPoint((a1.x + t * ax).roundToInt(), (a1.y + t * ay).roundToInt())
+}
+
+private const val EPSILON = 1e-9
+
+/** How far from either end a crossing has to be before it counts as one rather than a meeting. */
+private const val ENDPOINT_MARGIN = 1e-6
 
 /**
  * Which way a flow runs.

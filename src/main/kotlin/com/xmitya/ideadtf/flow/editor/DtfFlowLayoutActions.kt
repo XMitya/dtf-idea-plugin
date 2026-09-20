@@ -24,6 +24,8 @@ object DtfFlowLayoutActions {
         layout.templatePresentation.icon = AllIcons.Graph.Layout
         DtfFlowOrientation.entries.forEach { layout.add(OrientationAction(canvas, it)) }
         layout.addSeparator()
+        DtfFlowEdgeStyle.entries.forEach { layout.add(EdgeStyleAction(canvas, it)) }
+        layout.addSeparator()
         layout.add(ResetAction(canvas))
         return layout
     }
@@ -33,6 +35,23 @@ object DtfFlowLayoutActions {
         DtfFlowOrientation.RIGHT_TO_LEFT -> "dtf.flow.layout.rightToLeft"
         DtfFlowOrientation.TOP_TO_BOTTOM -> "dtf.flow.layout.topToBottom"
         DtfFlowOrientation.BOTTOM_TO_TOP -> "dtf.flow.layout.bottomToTop"
+    }
+
+    private fun messageKeyOf(style: DtfFlowEdgeStyle): String = when (style) {
+        DtfFlowEdgeStyle.ORTHOGONAL -> "dtf.flow.edges.orthogonal"
+        DtfFlowEdgeStyle.CURVED -> "dtf.flow.edges.curved"
+    }
+
+    private class EdgeStyleAction(private val canvas: DtfFlowCanvas, private val style: DtfFlowEdgeStyle) :
+        DumbAwareToggleAction({ DtfBundle.message(messageKeyOf(style)) }) {
+
+        override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+
+        override fun isSelected(e: AnActionEvent): Boolean = canvas.edgeStyle == style
+
+        override fun setSelected(e: AnActionEvent, state: Boolean) {
+            if (state) canvas.edgeStyle = style
+        }
     }
 
     private class OrientationAction(private val canvas: DtfFlowCanvas, private val orientation: DtfFlowOrientation) :

@@ -13,6 +13,7 @@ import com.xmitya.ideadtf.flow.DtfFlowTaskNode
 import com.xmitya.ideadtf.flow.DtfFlowTimerNode
 import com.xmitya.ideadtf.flow.GatewayKind
 import com.xmitya.ideadtf.flow.editor.DtfFlowCanvas
+import com.xmitya.ideadtf.flow.editor.DtfFlowEdgeStyle
 import com.xmitya.ideadtf.flow.editor.DtfFlowLayoutActions
 import com.xmitya.ideadtf.flow.layout.DtfFlowOrientation
 import com.xmitya.ideadtf.flow.layout.FlowPoint
@@ -131,6 +132,73 @@ class DtfFlowCanvasTest : DtfFlowFixtureTestCase() {
         assertFalse(canvas.scrollableTracksViewportWidth)
         assertFalse(canvas.scrollableTracksViewportHeight)
         assertEquals(canvas.preferredSize, canvas.preferredScrollableViewportSize)
+    }
+
+    /** Both arrow styles have to paint, including the bridges the square one draws. */
+    fun testBothEdgeStylesPaint() {
+        canvas.setGraph(everyShape())
+
+        canvas.edgeStyle = DtfFlowEdgeStyle.CURVED
+        paint()
+        assertEquals(DtfFlowEdgeStyle.CURVED, canvas.edgeStyle)
+
+        canvas.edgeStyle = DtfFlowEdgeStyle.ORTHOGONAL
+        paint()
+        canvas.edgeStyle = DtfFlowEdgeStyle.ORTHOGONAL // setting the same one changes nothing
+    }
+
+    /** A crossing made by dragging has to be painted as a bridge rather than as a junction. */
+    fun testADraggedCrossingIsPaintedWithABridge() {
+        canvas.setGraph(everyShape())
+        canvas.size = canvas.preferredSize
+        val nodes = canvas.currentGraph().nodes
+
+        canvas.moveNode(nodes[3].id, FlowPoint(0, 0))
+        canvas.moveNode(nodes[4].id, FlowPoint(400, 400))
+        paint()
+    }
+
+    /** The menu has to reflect what the diagram is doing, and change it when picked. */
+    fun testTheLayoutMenuReflectsAndChangesTheDiagram() {
+        canvas.setGraph(everyShape())
+        val children = DtfFlowLayoutActions.group(canvas).getChildren(null)
+        val toggles = children.filterIsInstance<com.intellij.openapi.actionSystem.ToggleAction>()
+
+        val topToBottom = toggles.first { it.templatePresentation.text == DtfBundle.message("dtf.flow.layout.topToBottom") }
+        val event = com.intellij.testFramework.TestActionEvent.createTestEvent(topToBottom)
+        assertFalse(topToBottom.isSelected(event))
+
+        topToBottom.setSelected(event, true)
+        assertEquals(DtfFlowOrientation.TOP_TO_BOTTOM, canvas.orientation)
+        assertTrue(topToBottom.isSelected(event))
+
+        // Unticking a radio-style entry means nothing; some other entry is picked instead.
+        topToBottom.setSelected(event, false)
+        assertEquals(DtfFlowOrientation.TOP_TO_BOTTOM, canvas.orientation)
+
+        val curved = toggles.first { it.templatePresentation.text == DtfBundle.message("dtf.flow.edges.curved") }
+        curved.setSelected(com.intellij.testFramework.TestActionEvent.createTestEvent(curved), true)
+        assertEquals(DtfFlowEdgeStyle.CURVED, canvas.edgeStyle)
+    }
+
+    /** Resetting is only worth offering once something has actually been moved. */
+    fun testResetIsOfferedOnlyWhenThereIsSomethingToReset() {
+        canvas.setGraph(everyShape())
+        val reset = DtfFlowLayoutActions.group(canvas).getChildren(null)
+            .filterIsInstance<com.intellij.openapi.actionSystem.AnAction>()
+            .first { it.templatePresentation.text == DtfBundle.message("dtf.flow.layout.reset") }
+
+        val before = com.intellij.testFramework.TestActionEvent.createTestEvent(reset)
+        reset.update(before)
+        assertFalse(before.presentation.isEnabled)
+
+        canvas.moveNode(canvas.currentGraph().nodes.first().id, FlowPoint(300, 300))
+        val after = com.intellij.testFramework.TestActionEvent.createTestEvent(reset)
+        reset.update(after)
+        assertTrue(after.presentation.isEnabled)
+
+        reset.actionPerformed(after)
+        assertFalse(canvas.hasMovedBoxes)
     }
 
     private fun paint() {
@@ -379,7 +447,7 @@ class DtfFlowCanvasTest : DtfFlowFixtureTestCase() {
         val group = DtfFlowLayoutActions.group(canvas)
         val children = group.getChildren(null)
 
-        assertEquals(DtfFlowOrientation.entries.size + 2, children.size)
+        assertEquals(DtfFlowOrientation.entries.size + DtfFlowEdgeStyle.entries.size + 3, children.size)
     }
 
     /**

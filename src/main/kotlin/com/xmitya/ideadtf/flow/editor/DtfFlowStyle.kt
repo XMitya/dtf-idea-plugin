@@ -44,6 +44,9 @@ object DtfFlowStyle {
 
     fun edgeHitTolerance(): Int = JBUI.scale(5)
 
+    /** The bridge an arrow makes over one it crosses. Big enough to read, small enough not to blur. */
+    fun hopRadius(): Int = JBUI.scale(4)
+
     val boxBackground: JBColor = JBColor.namedColor("Tree.background", JBColor(0xFFFFFF, 0x3C3F41))
     val boxBorder: JBColor = JBColor.namedColor("Component.borderColor", JBColor(0xC4C4C4, 0x5E6060))
     val hoverBackground: JBColor = JBColor.namedColor("Table.hoverBackground", JBColor(0xEDF5FC, 0x464A4D))

@@ -64,6 +64,13 @@ class DtfFlowCanvas :
     /** Boxes the reader has dragged. Everything else is still arranged around them. */
     private val pinned = LinkedHashMap<String, FlowPoint>()
 
+    var edgeStyle: DtfFlowEdgeStyle = DtfFlowEdgeStyle.ORTHOGONAL
+        set(value) {
+            if (value == field) return
+            field = value
+            repaint()
+        }
+
     var orientation: DtfFlowOrientation = DtfFlowOrientation.LEFT_TO_RIGHT
         set(value) {
             if (value == field) return
@@ -234,7 +241,7 @@ class DtfFlowCanvas :
             } else {
                 DtfFlowStyle.edgeStroke()
             }
-            route.points.zipWithNext().forEach { (from, to) -> g2.drawLine(from.x, from.y, to.x, to.y) }
+            g2.draw(DtfFlowEdgePainter.pathOf(route.points, edgeStyle, route.hops, DtfFlowStyle.hopRadius()))
             val last = route.points.last()
             val previous = route.points[route.points.size - 2]
             paintArrowHead(g2, previous, last)
