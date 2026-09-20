@@ -13,6 +13,9 @@ import com.xmitya.ideadtf.flow.DtfFlowTaskNode
 import com.xmitya.ideadtf.flow.DtfFlowTimerNode
 import com.xmitya.ideadtf.flow.GatewayKind
 import com.xmitya.ideadtf.flow.editor.DtfFlowCanvas
+import com.xmitya.ideadtf.flow.editor.DtfFlowLayoutActions
+import com.xmitya.ideadtf.flow.layout.DtfFlowOrientation
+import com.xmitya.ideadtf.flow.layout.FlowPoint
 import java.awt.Dimension
 import java.awt.Point
 import java.awt.image.BufferedImage
@@ -242,8 +245,8 @@ class DtfFlowCanvasTest : DtfFlowFixtureTestCase() {
         assertNull(canvas.toolTipText)
     }
 
-    /** Dragging empty canvas pans; dragging from a box must not. */
-    fun testDraggingTheBackgroundPansAndDraggingABoxDoesNot() {
+    /** Dragging the background pans the view; it must not move anything. */
+    fun testDraggingTheBackgroundPansWithoutMovingABox() {
         canvas.setGraph(everyShape())
         canvas.size = canvas.preferredSize
 
@@ -251,9 +254,24 @@ class DtfFlowCanvasTest : DtfFlowFixtureTestCase() {
         canvas.dispatchEvent(mouse(java.awt.event.MouseEvent.MOUSE_DRAGGED, Point(-40, -40)))
         canvas.dispatchEvent(mouse(java.awt.event.MouseEvent.MOUSE_RELEASED, Point(-40, -40)))
 
-        val box = centreOf(canvas.currentGraph().nodes.first())
-        canvas.dispatchEvent(mouse(java.awt.event.MouseEvent.MOUSE_PRESSED, box))
-        canvas.dispatchEvent(mouse(java.awt.event.MouseEvent.MOUSE_DRAGGED, Point(box.x + 20, box.y + 20)))
+        assertFalse(canvas.hasMovedBoxes)
+    }
+
+    /** Releasing ends the drag, so moving the mouse afterwards must not keep dragging the box. */
+    fun testAReleasedBoxStopsFollowingTheCursor() {
+        canvas.setGraph(everyShape())
+        canvas.size = canvas.preferredSize
+        val node = canvas.currentGraph().nodes.first()
+        val grab = centreOf(node)
+
+        canvas.dispatchEvent(mouse(java.awt.event.MouseEvent.MOUSE_PRESSED, grab))
+        canvas.dispatchEvent(mouse(java.awt.event.MouseEvent.MOUSE_DRAGGED, Point(grab.x + 40, grab.y)))
+        canvas.dispatchEvent(mouse(java.awt.event.MouseEvent.MOUSE_RELEASED, Point(grab.x + 40, grab.y)))
+        val settled = requireNotNull(canvas.positionOf(node.id))
+
+        canvas.dispatchEvent(mouse(java.awt.event.MouseEvent.MOUSE_DRAGGED, Point(grab.x + 300, grab.y)))
+
+        assertEquals(settled, canvas.positionOf(node.id))
     }
 
     /** Ctrl and the wheel zoom; the wheel on its own is the scroll pane's business. */
@@ -277,11 +295,102 @@ class DtfFlowCanvasTest : DtfFlowFixtureTestCase() {
         assertNull(openedFile())
     }
 
+    /** Dragging a box is the way out of a tangle no arrangement can untangle. */
+    fun testDraggingABoxMovesIt() {
+        canvas.setGraph(everyShape())
+        canvas.size = canvas.preferredSize
+        val node = canvas.currentGraph().nodes.first()
+        val grab = centreOf(node)
+        val before = canvas.positionOf(node.id)
+
+        canvas.dispatchEvent(mouse(java.awt.event.MouseEvent.MOUSE_PRESSED, grab))
+        canvas.dispatchEvent(mouse(java.awt.event.MouseEvent.MOUSE_DRAGGED, Point(grab.x + 120, grab.y + 90)))
+        canvas.dispatchEvent(mouse(java.awt.event.MouseEvent.MOUSE_RELEASED, Point(grab.x + 120, grab.y + 90)))
+
+        val after = requireNotNull(canvas.positionOf(node.id))
+        assertTrue(canvas.hasMovedBoxes)
+        assertEquals(requireNotNull(before).x + 120, after.x)
+        assertEquals(before.y + 90, after.y)
+    }
+
+    /** The box follows the cursor by the amount dragged, not by jumping its corner to it. */
+    fun testADraggedBoxKeepsTheGrabPoint() {
+        canvas.setGraph(everyShape())
+        canvas.size = canvas.preferredSize
+        val node = canvas.currentGraph().nodes.first()
+        val rect = requireNotNull(canvas.positionOf(node.id))
+        val grab = Point(rect.x + 5, rect.y + 5)
+
+        canvas.dispatchEvent(mouse(java.awt.event.MouseEvent.MOUSE_PRESSED, grab))
+        canvas.dispatchEvent(mouse(java.awt.event.MouseEvent.MOUSE_DRAGGED, Point(grab.x + 50, grab.y)))
+
+        assertEquals(rect.x + 50, requireNotNull(canvas.positionOf(node.id)).x)
+    }
+
+    fun testResettingPutsAMovedBoxBack() {
+        canvas.setGraph(everyShape())
+        canvas.size = canvas.preferredSize
+        val node = canvas.currentGraph().nodes.first()
+        val before = requireNotNull(canvas.positionOf(node.id))
+        canvas.moveNode(node.id, FlowPoint(before.x + 200, before.y + 200))
+
+        canvas.resetPositions()
+
+        assertFalse(canvas.hasMovedBoxes)
+        assertEquals(before, canvas.positionOf(node.id))
+        canvas.resetPositions() // a second time is a no-op rather than a re-layout
+    }
+
+    /** A drag must never push a box off the top-left of the canvas, where it cannot be reached. */
+    fun testABoxCannotBeDraggedOffTheCanvas() {
+        canvas.setGraph(everyShape())
+        val node = canvas.currentGraph().nodes.first()
+
+        canvas.moveNode(node.id, FlowPoint(-500, -500))
+
+        val moved = requireNotNull(canvas.positionOf(node.id))
+        assertEquals(0, moved.x)
+        assertEquals(0, moved.y)
+    }
+
+    fun testMovingSomethingThatIsNotThereIsHarmless() {
+        canvas.setGraph(everyShape())
+
+        canvas.moveNode("no-such-node", FlowPoint(10, 10))
+
+        assertFalse(canvas.hasMovedBoxes)
+    }
+
+    /** Turning the flow rearranges it, and drops positions that only meant something the old way. */
+    fun testChangingOrientationRearrangesAndForgetsMovedBoxes() {
+        canvas.setGraph(everyShape())
+        val node = canvas.currentGraph().nodes.first()
+        canvas.moveNode(node.id, FlowPoint(400, 400))
+
+        canvas.orientation = DtfFlowOrientation.TOP_TO_BOTTOM
+
+        assertFalse(canvas.hasMovedBoxes)
+        assertEquals(DtfFlowOrientation.TOP_TO_BOTTOM, canvas.orientation)
+        canvas.orientation = DtfFlowOrientation.TOP_TO_BOTTOM // setting the same one changes nothing
+        paint()
+    }
+
+    fun testTheLayoutMenuOffersEveryDirectionAndAReset() {
+        val group = DtfFlowLayoutActions.group(canvas)
+        val children = group.getChildren(null)
+
+        assertEquals(DtfFlowOrientation.entries.size + 2, children.size)
+    }
+
+    /**
+     * The button mask is not decoration: `SwingUtilities.isLeftMouseButton` reads the modifiers, not
+     * the button field, so an event without it is ignored by every drag the canvas has.
+     */
     private fun mouse(id: Int, point: Point, clicks: Int = 1) = java.awt.event.MouseEvent(
         canvas,
         id,
         System.currentTimeMillis(),
-        0,
+        java.awt.event.InputEvent.BUTTON1_DOWN_MASK,
         point.x,
         point.y,
         clicks,

@@ -46,6 +46,26 @@ internal fun distanceToSegment(point: FlowPoint, from: FlowPoint, to: FlowPoint)
 private fun hypotenuse(dx: Int, dy: Int): Double = sqrt((dx * dx + dy * dy).toDouble())
 
 /**
+ * Which way a flow runs.
+ *
+ * The arrangement is computed once, along an abstract "rank" axis, and only mapped onto x and y at
+ * the very end - so a different direction is a different mapping rather than a different algorithm.
+ */
+enum class DtfFlowOrientation {
+    LEFT_TO_RIGHT,
+    RIGHT_TO_LEFT,
+    TOP_TO_BOTTOM,
+    BOTTOM_TO_TOP,
+    ;
+
+    /** Whether ranks progress along x. The other two run down the page instead. */
+    val isHorizontal: Boolean get() = this == LEFT_TO_RIGHT || this == RIGHT_TO_LEFT
+
+    /** Whether the rank axis is mirrored, so rank 0 ends up at the far side. */
+    val isReversed: Boolean get() = this == RIGHT_TO_LEFT || this == BOTTOM_TO_TOP
+}
+
+/**
  * The knobs the arrangement uses, in logical units.
  *
  * Scaling is the canvas's job, so nothing here knows about HiDPI - which is what keeps the whole

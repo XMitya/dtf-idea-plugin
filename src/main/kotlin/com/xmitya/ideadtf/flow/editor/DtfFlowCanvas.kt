@@ -5,6 +5,7 @@ import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.DataSink
 import com.intellij.openapi.actionSystem.UiDataProvider
 import com.intellij.pom.Navigatable
+import com.intellij.ui.PopupHandler
 import com.intellij.ui.scale.JBUIScale
 import com.intellij.util.ui.GraphicsUtil
 import com.intellij.util.ui.JBFont
@@ -20,6 +21,7 @@ import com.xmitya.ideadtf.flow.DtfFlowTaskNode
 import com.xmitya.ideadtf.flow.DtfFlowTimerNode
 import com.xmitya.ideadtf.flow.layout.DtfFlowLayout
 import com.xmitya.ideadtf.flow.layout.DtfFlowLayouter
+import com.xmitya.ideadtf.flow.layout.DtfFlowOrientation
 import com.xmitya.ideadtf.flow.layout.FlowPoint
 import com.xmitya.ideadtf.flow.layout.FlowRect
 import com.xmitya.ideadtf.flow.layout.FlowSize
@@ -59,6 +61,18 @@ class DtfFlowCanvas :
     private var hoveredId: String? = null
     private var selectedId: String? = null
 
+    /** Boxes the reader has dragged. Everything else is still arranged around them. */
+    private val pinned = LinkedHashMap<String, FlowPoint>()
+
+    var orientation: DtfFlowOrientation = DtfFlowOrientation.LEFT_TO_RIGHT
+        set(value) {
+            if (value == field) return
+            field = value
+            // Positions from the old direction mean nothing in the new one.
+            pinned.clear()
+            relayout()
+        }
+
     var zoom: Double = 1.0
         set(value) {
             val clamped = value.coerceIn(MIN_ZOOM, MAX_ZOOM)
@@ -77,9 +91,22 @@ class DtfFlowCanvas :
         foreground = UIUtil.getLabelForeground()
         background = DtfFlowStyle.canvasBackground
         ToolTipManager.sharedInstance().registerComponent(this)
-        addMouseListener(ClickHandler())
-        addMouseMotionListener(ClickHandler())
+        // One handler for both, not one each: a press starts a drag and a motion continues it, and
+        // two instances would each hold half of that state and neither would ever act on it.
+        val mouse = ClickHandler()
+        addMouseListener(mouse)
+        addMouseMotionListener(mouse)
         addMouseWheelListener { event -> if (event.isControlDown || event.isMetaDown) zoomBy(event) else parent?.dispatchEvent(event) }
+    }
+
+    /**
+     * Adds the right-click menu.
+     *
+     * Not done in the constructor: building an action group needs the `ActionManager`, and a canvas
+     * is a plain Swing component that should be constructible before any of that exists.
+     */
+    fun installPopupMenu() {
+        PopupHandler.installPopupMenu(this, DtfFlowLayoutActions.popupGroup(this), POPUP_PLACE)
     }
 
     /** Replaces what is drawn. EDT only. */
@@ -87,8 +114,27 @@ class DtfFlowCanvas :
         this.graph = graph
         this.hoveredId = null
         this.selectedId = null
+        pinned.clear()
         relayout()
     }
+
+    /** Puts every box back where the arrangement would have it. */
+    fun resetPositions() {
+        if (pinned.isEmpty()) return
+        pinned.clear()
+        relayout()
+    }
+
+    val hasMovedBoxes: Boolean get() = pinned.isNotEmpty()
+
+    /** Moves one box, as dragging it does. Public so the behaviour can be driven from a test. */
+    fun moveNode(nodeId: String, to: FlowPoint) {
+        if (graph.node(nodeId) == null) return
+        pinned[nodeId] = FlowPoint(to.x.coerceAtLeast(0), to.y.coerceAtLeast(0))
+        relayout()
+    }
+
+    fun positionOf(nodeId: String): FlowPoint? = layout.nodes[nodeId]?.let { FlowPoint(it.x, it.y) }
 
     fun currentGraph(): DtfFlowGraph = graph
 
@@ -115,7 +161,13 @@ class DtfFlowCanvas :
     }
 
     private fun relayout() {
-        layout = DtfFlowLayouter.layout(graph, graph.nodes.associate { it.id to measure(it) }, DtfFlowStyle.layoutStyle())
+        layout = DtfFlowLayouter.layout(
+            graph,
+            graph.nodes.associate { it.id to measure(it) },
+            DtfFlowStyle.layoutStyle(),
+            orientation,
+            pinned,
+        )
         revalidate()
         repaint()
     }
@@ -283,15 +335,27 @@ class DtfFlowCanvas :
     private inner class ClickHandler : MouseAdapter() {
 
         private var panFrom: Point? = null
+        private var draggedId: String? = null
+
+        /** Where inside the box the drag started, so it does not jump to the cursor. */
+        private var grabOffset: FlowPoint = FlowPoint(0, 0)
 
         override fun mousePressed(event: MouseEvent) {
-            selectedId = nodeIdAt(event.point)
-            panFrom = event.point.takeIf { selectedId == null && SwingUtilities.isLeftMouseButton(event) }
+            val id = nodeIdAt(event.point)
+            selectedId = id
+            if (id != null && SwingUtilities.isLeftMouseButton(event)) {
+                val rect = layout.nodes[id]
+                val point = toDiagram(event.point)
+                draggedId = id
+                grabOffset = FlowPoint(point.x - (rect?.x ?: 0), point.y - (rect?.y ?: 0))
+            }
+            panFrom = event.point.takeIf { id == null && SwingUtilities.isLeftMouseButton(event) }
             repaint()
         }
 
         override fun mouseReleased(event: MouseEvent) {
             panFrom = null
+            draggedId = null
         }
 
         override fun mouseClicked(event: MouseEvent) {
@@ -309,6 +373,11 @@ class DtfFlowCanvas :
         }
 
         override fun mouseDragged(event: MouseEvent) {
+            draggedId?.let { id ->
+                val point = toDiagram(event.point)
+                moveNode(id, FlowPoint(point.x - grabOffset.x, point.y - grabOffset.y))
+                return
+            }
             val from = panFrom ?: return
             val visible = visibleRect
             scrollRectToVisible(
@@ -348,6 +417,7 @@ class DtfFlowCanvas :
     override fun getScrollableTracksViewportHeight(): Boolean = false
 
     private companion object {
+        const val POPUP_PLACE = "DtfFlowDiagramPopup"
         const val MIN_ZOOM = 0.25
         const val MAX_ZOOM = 3.0
         const val ZOOM_STEP = 1.1

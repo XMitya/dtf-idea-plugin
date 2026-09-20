@@ -75,6 +75,13 @@ Double-click opens what a box stands for: a task opens its class, calling code o
 Ctrl/Cmd with the wheel zooms, dragging the background pans, and the toolbar has *Fit Content* for
 when a module turns out larger than expected.
 
+Some crossings belong to the flow rather than to the arrangement — a task scheduled from six places
+will have six arrows into it however the boxes are placed — so there are two ways to untangle a
+diagram by hand. **Dragging a box** moves it and only it: everything else stays where the arrangement
+put it, and the arrows follow, meeting each box on whichever side now faces the other. *Layout* in
+the toolbar, or on a right-click, turns the whole flow **left to right, right to left, top to bottom
+or bottom to top**, and *Reset Moved Boxes* puts everything back.
+
 The search runs once, in the background under a cancellable progress, and the tab is rebuilt only
 when *Refresh* is pressed. Asking for the same diagram twice brings the tab you already have to the
 front rather than opening a second one.

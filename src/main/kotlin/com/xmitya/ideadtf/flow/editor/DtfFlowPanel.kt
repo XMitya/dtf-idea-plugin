@@ -43,6 +43,7 @@ class DtfFlowPanel(private val project: Project, private val scope: DtfFlowScope
     init {
         content.add(banner, BorderLayout.NORTH)
         content.add(status, BorderLayout.CENTER)
+        canvas.installPopupMenu()
         toolbar = createToolbar()
         setContent(content)
     }
@@ -91,6 +92,8 @@ class DtfFlowPanel(private val project: Project, private val scope: DtfFlowScope
     private fun createToolbar(): JComponent {
         val group = DefaultActionGroup(
             SimpleAction("dtf.flow.refresh", AllIcons.Actions.Refresh) { refresh() },
+            Separator.getInstance(),
+            DtfFlowLayoutActions.group(canvas),
             Separator.getInstance(),
             SimpleAction("dtf.flow.zoom.in", AllIcons.General.ZoomIn) { canvas.zoom *= ZOOM_STEP },
             SimpleAction("dtf.flow.zoom.out", AllIcons.General.ZoomOut) { canvas.zoom /= ZOOM_STEP },

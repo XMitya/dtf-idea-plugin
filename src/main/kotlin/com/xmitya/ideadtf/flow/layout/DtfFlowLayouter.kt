@@ -2,6 +2,7 @@ package com.xmitya.ideadtf.flow.layout
 
 import com.xmitya.ideadtf.flow.DtfFlowEdge
 import com.xmitya.ideadtf.flow.DtfFlowGraph
+import kotlin.math.abs
 
 /**
  * One arrow, routed.
@@ -54,7 +55,19 @@ class DtfFlowLayout(val nodes: Map<String, FlowRect>, val edges: List<FlowEdgeRo
  */
 object DtfFlowLayouter {
 
-    fun layout(graph: DtfFlowGraph, sizes: Map<String, FlowSize>, style: DtfFlowLayoutStyle = DtfFlowLayoutStyle()): DtfFlowLayout {
+    /**
+     * @param orientation which way the flow reads.
+     * @param pinned boxes the reader has dragged somewhere, in final coordinates. They keep their
+     *   place and everything else is arranged around them, which is what makes pulling one node out
+     *   of a tangle a local edit rather than a reshuffle of the whole picture.
+     */
+    fun layout(
+        graph: DtfFlowGraph,
+        sizes: Map<String, FlowSize>,
+        style: DtfFlowLayoutStyle = DtfFlowLayoutStyle(),
+        orientation: DtfFlowOrientation = DtfFlowOrientation.LEFT_TO_RIGHT,
+        pinned: Map<String, FlowPoint> = emptyMap(),
+    ): DtfFlowLayout {
         if (graph.nodes.isEmpty()) return DtfFlowLayout.EMPTY
 
         val ids = graph.nodes.map { it.id }
@@ -67,9 +80,18 @@ object DtfFlowLayouter {
         val columns = columnsOf(ids, ranks, realEdges, reversed, style)
         orderColumns(columns, realEdges, reversed, style)
 
-        val rects = place(columns, sizes, style)
-        val routes = realEdges.map { route(it, rects, columns.dummiesOf(it), reversed.contains(it.key), style) } +
-            selfEdges.mapNotNull { selfRoute(it, rects[it.fromId], style) }
+        val axisRects = place(columns, sizes, style, orientation)
+        val totalAlong = axisRects.values.maxOfOrNull { it.along + it.alongSize } ?: 0
+        val rects = LinkedHashMap<String, FlowRect>()
+        axisRects.forEach { (id, rect) ->
+            val placed = toRect(rect, orientation, totalAlong)
+            rects[id] = pinned[id]?.let { FlowRect(it.x, it.y, placed.width, placed.height) } ?: placed
+        }
+
+        val routes = realEdges.map {
+            val moved = it.fromId in pinned || it.toId in pinned
+            route(it, rects, columns.dummiesOf(it), reversed.contains(it.key), style, detached = moved)
+        } + selfEdges.mapNotNull { selfRoute(it, rects[it.fromId], style) }
 
         return DtfFlowLayout(rects, routes, sizeOf(rects, routes, style))
     }
@@ -273,65 +295,124 @@ object DtfFlowLayouter {
 
     // --- step 4: coordinates --------------------------------------------------------------------
 
-    private fun place(columns: Columns, sizes: Map<String, FlowSize>, style: DtfFlowLayoutStyle): Map<String, FlowRect> {
-        val rects = LinkedHashMap<String, FlowRect>()
-        var x = style.padding
+    /**
+     * A box in rank space: [along] runs in the direction the flow reads, [across] is the offset
+     * within its rank. Only [toRect] turns that into pixels, which is the whole of what an
+     * orientation change costs.
+     */
+    private class AxisRect(val along: Int, val across: Int, val alongSize: Int, val acrossSize: Int)
+
+    private fun place(
+        columns: Columns,
+        sizes: Map<String, FlowSize>,
+        style: DtfFlowLayoutStyle,
+        orientation: DtfFlowOrientation,
+    ): Map<String, AxisRect> {
+        val rects = LinkedHashMap<String, AxisRect>()
+        var along = style.padding
         for (rank in columns.ranks) {
-            val widest = rank.maxOfOrNull { sizeOf(it, sizes, style).width } ?: 0
-            var y = style.padding
+            val thickest = rank.maxOfOrNull { alongSizeOf(it, sizes, style, orientation) } ?: 0
+            var across = style.padding
             for (id in rank) {
-                val size = sizeOf(id, sizes, style)
-                rects[id] = FlowRect(x, y, size.width, size.height)
-                y += size.height + style.nodeGap
+                val alongSize = alongSizeOf(id, sizes, style, orientation)
+                val acrossSize = acrossSizeOf(id, sizes, style, orientation)
+                rects[id] = AxisRect(along, across, alongSize, acrossSize)
+                across += acrossSize + style.nodeGap
             }
-            x += widest + style.rankGap
+            along += thickest + style.rankGap
         }
         centreOnNeighbours(columns, rects, style)
         return rects
     }
 
     /**
-     * Pulls each box opposite the ones it connects to, then pushes the column apart again where that
+     * Pulls each box opposite the ones it connects to, then pushes the rank apart again where that
      * made two overlap. Two passes each way is enough to make a chain read as a straight line and a
      * fan-out as a symmetric bundle.
      */
-    private fun centreOnNeighbours(columns: Columns, rects: MutableMap<String, FlowRect>, style: DtfFlowLayoutStyle) {
+    private fun centreOnNeighbours(columns: Columns, rects: MutableMap<String, AxisRect>, style: DtfFlowLayoutStyle) {
         repeat(2) {
             for (direction in listOf(1, -1)) {
                 val indices = if (direction == 1) 1..columns.ranks.lastIndex else columns.ranks.lastIndex - 1 downTo 0
                 for (index in indices) {
                     val neighbourRank = columns.ranks[index - direction]
-                    val neighbourCentres = neighbourRank.mapNotNull { rects[it]?.centerY }
+                    val neighbourCentres = neighbourRank.mapNotNull { rects[it]?.let { rect -> rect.across + rect.acrossSize / 2 } }
                     if (neighbourCentres.isEmpty()) continue
                     for (id in columns.ranks[index]) {
                         val rect = rects[id] ?: continue
                         val wanted = medianOf(neighbourCentres)
-                        rects[id] = rect.copy(y = wanted - rect.height / 2)
+                        rects[id] = AxisRect(rect.along, wanted - rect.acrossSize / 2, rect.alongSize, rect.acrossSize)
                     }
                     separate(columns.ranks[index], rects, style)
                 }
             }
         }
-        val top = rects.values.minOfOrNull { it.y } ?: style.padding
-        val shift = style.padding - top
-        if (shift != 0) rects.keys.toList().forEach { rects[it] = rects.getValue(it).translated(0, shift) }
-    }
-
-    private fun separate(rank: List<String>, rects: MutableMap<String, FlowRect>, style: DtfFlowLayoutStyle) {
-        var previousBottom: Int? = null
-        for (id in rank) {
-            val rect = rects[id] ?: continue
-            val minimumY = previousBottom?.plus(style.nodeGap)
-            val y = if (minimumY != null) clampMin(rect.y, minimumY) else rect.y
-            rects[id] = rect.copy(y = y)
-            previousBottom = y + rect.height
+        val first = rects.values.minOfOrNull { it.across } ?: style.padding
+        val shift = style.padding - first
+        if (shift != 0) {
+            rects.keys.toList().forEach { id ->
+                val rect = rects.getValue(id)
+                rects[id] = AxisRect(rect.along, rect.across + shift, rect.alongSize, rect.acrossSize)
+            }
         }
     }
 
+    private fun separate(rank: List<String>, rects: MutableMap<String, AxisRect>, style: DtfFlowLayoutStyle) {
+        var previousEnd: Int? = null
+        for (id in rank) {
+            val rect = rects[id] ?: continue
+            val minimum = previousEnd?.plus(style.nodeGap)
+            val across = if (minimum != null) clampMin(rect.across, minimum) else rect.across
+            rects[id] = AxisRect(rect.along, across, rect.alongSize, rect.acrossSize)
+            previousEnd = across + rect.acrossSize
+        }
+    }
+
+    private fun alongSizeOf(id: String, sizes: Map<String, FlowSize>, style: DtfFlowLayoutStyle, orientation: DtfFlowOrientation): Int =
+        sizeOf(id, sizes, style).let { if (orientation.isHorizontal) it.width else it.height }
+
+    private fun acrossSizeOf(id: String, sizes: Map<String, FlowSize>, style: DtfFlowLayoutStyle, orientation: DtfFlowOrientation): Int =
+        sizeOf(id, sizes, style).let { if (orientation.isHorizontal) it.height else it.width }
+
     private fun sizeOf(id: String, sizes: Map<String, FlowSize>, style: DtfFlowLayoutStyle): FlowSize =
-        sizes[id] ?: FlowSize(0, style.dummyHeight)
+        sizes[id] ?: FlowSize(style.dummyHeight, style.dummyHeight)
+
+    /** The one place rank space becomes pixels. */
+    private fun toRect(rect: AxisRect, orientation: DtfFlowOrientation, totalAlong: Int): FlowRect {
+        val along = if (orientation.isReversed) totalAlong - rect.along - rect.alongSize else rect.along
+        return if (orientation.isHorizontal) {
+            FlowRect(along, rect.across, rect.alongSize, rect.acrossSize)
+        } else {
+            FlowRect(rect.across, along, rect.acrossSize, rect.alongSize)
+        }
+    }
 
     // --- step 5: routes -------------------------------------------------------------------------
+
+    /**
+     * Where an arrow leaves one box and enters the next.
+     *
+     * Decided from where the boxes actually are rather than from the orientation, so that an arrow
+     * still meets a box on a sensible side after it has been dragged somewhere the arrangement never
+     * put it.
+     */
+    private fun anchorsOf(from: FlowRect, to: FlowRect): Pair<FlowPoint, FlowPoint> {
+        val dx = to.centerX - from.centerX
+        val dy = to.centerY - from.centerY
+        return if (abs(dx) >= abs(dy)) {
+            if (dx >= 0) {
+                FlowPoint(from.right, from.centerY) to FlowPoint(to.x, to.centerY)
+            } else {
+                FlowPoint(from.x, from.centerY) to FlowPoint(to.right, to.centerY)
+            }
+        } else {
+            if (dy >= 0) {
+                FlowPoint(from.centerX, from.bottom) to FlowPoint(to.centerX, to.y)
+            } else {
+                FlowPoint(from.centerX, from.y) to FlowPoint(to.centerX, to.bottom)
+            }
+        }
+    }
 
     private fun route(
         edge: DtfFlowEdge,
@@ -339,23 +420,29 @@ object DtfFlowLayouter {
         dummies: List<String>,
         reversed: Boolean,
         style: DtfFlowLayoutStyle,
+        detached: Boolean,
     ): FlowEdgeRoute {
         val from = rects.getValue(edge.fromId)
         val to = rects.getValue(edge.toId)
-        val leftToRight = from.right <= to.x
-
-        val start = if (leftToRight) FlowPoint(from.right, from.centerY) else FlowPoint(from.x, from.centerY)
-        val end = if (leftToRight) FlowPoint(to.x, to.centerY) else FlowPoint(to.right, to.centerY)
-        val waypoints = dummies.mapNotNull { rects[it] }.map { FlowPoint(it.centerX, it.centerY) }
+        val (start, end) = anchorsOf(from, to)
+        // Waypoints were computed for where the arrangement put these boxes. Once one has been
+        // dragged they describe a path around nothing, so a moved edge goes straight instead.
+        val waypoints = if (detached) emptyList() else dummies.mapNotNull { rects[it] }.map { FlowPoint(it.centerX, it.centerY) }
 
         val points = buildList {
             add(start)
-            if (waypoints.isEmpty() && start.y != end.y) {
-                // A plain diagonal between two adjacent columns reads as a mistake; an elbow halfway
-                // across the gap reads as a connection.
-                val middle = start.x + (end.x - start.x) / 2
-                add(FlowPoint(middle, start.y))
-                add(FlowPoint(middle, end.y))
+            if (waypoints.isEmpty() && start.x != end.x && start.y != end.y) {
+                // A plain diagonal reads as a mistake; an elbow halfway across the gap reads as a
+                // connection. Which way it bends follows the side the arrow left from.
+                if (abs(end.x - start.x) >= abs(end.y - start.y)) {
+                    val middle = start.x + (end.x - start.x) / 2
+                    add(FlowPoint(middle, start.y))
+                    add(FlowPoint(middle, end.y))
+                } else {
+                    val middle = start.y + (end.y - start.y) / 2
+                    add(FlowPoint(start.x, middle))
+                    add(FlowPoint(end.x, middle))
+                }
             }
             addAll(waypoints)
             add(end)
