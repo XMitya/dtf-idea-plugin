@@ -1,10 +1,15 @@
+import kotlinx.kover.gradle.plugin.dsl.AggregationType
+import kotlinx.kover.gradle.plugin.dsl.CoverageUnit
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
+import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
 
 plugins {
     kotlin("jvm") version "2.3.21"
     id("org.jetbrains.intellij.platform") version "2.19.0"
+    id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
+    id("org.jetbrains.kotlinx.kover") version "0.9.9"
 }
 
 group = providers.gradleProperty("pluginGroup").get()
@@ -24,7 +29,7 @@ dependencies {
     intellijPlatform {
         // Community edition on purpose: makes an accidental Ultimate-only API dependency impossible.
         intellijIdeaCommunity("2025.2.3")
-        bundledPlugin("com.intellij.java")    // UAST + Java PSI
+        bundledPlugin("com.intellij.java") // UAST + Java PSI
         bundledPlugin("org.jetbrains.kotlin") // Kotlin UAST
         // YAML PSI, for reading `distributed-task.task-properties-group.task-properties.<NAME>.cron`.
         // Optional at runtime - see the <depends optional> in plugin.xml - but needed here to compile
@@ -91,7 +96,43 @@ tasks.test {
     useJUnit()
 }
 
-/**
+/*
+ * Formatting is governed by `.editorconfig`, which selects the `intellij_idea` code style: the
+ * project is an IDEA plugin written in IDEA, so its sources already follow that layout and the
+ * linter stays a gate rather than a reformatting campaign.
+ */
+ktlint {
+    version = "1.8.0"
+    reporters {
+        reporter(ReporterType.PLAIN)
+        reporter(ReporterType.CHECKSTYLE)
+    }
+}
+
+kover {
+    reports {
+        verify {
+            rule {
+                bound {
+                    // Lines rather than branches: most branches here are Kotlin's own null checks
+                    // on platform API that is nullable in principle and never null in a fixture, so
+                    // a branch gate would measure how defensive the code is rather than how tested.
+                    // Nothing is excluded from the count - what a test cannot reach is worth seeing.
+                    minValue = 90
+                    coverageUnits = CoverageUnit.LINE
+                    aggregationForGroup = AggregationType.COVERED_PERCENTAGE
+                }
+            }
+        }
+    }
+}
+
+// Keep `check` an honest gate: both the style and the coverage rules run with the tests.
+tasks.check {
+    dependsOn(tasks.koverVerify)
+}
+
+/*
  * The verifier runs in a forked JVM and downloads from the Marketplace. Pass through whatever proxy
  * settings this build was started with, so that it works behind a proxy without any host being
  * written into the project. Supply them as usual, e.g.
@@ -99,15 +140,18 @@ tasks.test {
  */
 tasks.withType<VerifyPluginTask>().configureEach {
     val proxyProperties = listOf(
-        "http.proxyHost", "http.proxyPort", "http.nonProxyHosts",
-        "https.proxyHost", "https.proxyPort",
+        "http.proxyHost",
+        "http.proxyPort",
+        "http.nonProxyHosts",
+        "https.proxyHost",
+        "https.proxyPort",
     )
     proxyProperties.forEach { key ->
         System.getProperty(key)?.let { systemProperty(key, it) }
     }
 }
 
-/**
+/*
  * Writes the `updatePlugins.xml` that a custom plugin repository serves, so the IDE can offer new
  * versions through its normal update flow instead of someone installing a zip by hand each time.
  *
@@ -141,6 +185,7 @@ tasks.register("generateUpdatePluginsXml") {
             .newDocumentBuilder()
             .parse(descriptor)
             .documentElement
+
         // Direct children only: `id` and `name` also occur deeper in the descriptor.
         fun field(tag: String): String {
             val children = root.childNodes

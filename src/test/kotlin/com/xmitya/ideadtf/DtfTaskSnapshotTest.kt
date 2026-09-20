@@ -172,10 +172,9 @@ class DtfTaskSnapshotTest : DtfFixtureTestCase() {
         )
     }
 
-    private fun snapshot(): DtfTaskSnapshot =
-        ReadAction.compute<DtfTaskSnapshot, RuntimeException> {
-            DtfTaskSnapshotBuilder(project).build(DtfTaskSearcher(project).findAllTasks(), stamp = 1L)
-        }
+    private fun snapshot(): DtfTaskSnapshot = ReadAction.compute<DtfTaskSnapshot, RuntimeException> {
+        DtfTaskSnapshotBuilder(project).build(DtfTaskSearcher(project).findAllTasks(), stamp = 1L)
+    }
 
     private fun entries(): List<DtfTaskEntry> = snapshot().modules.flatMap { it.tasks }
 

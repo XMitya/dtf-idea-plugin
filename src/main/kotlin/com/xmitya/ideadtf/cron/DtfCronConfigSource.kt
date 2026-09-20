@@ -41,7 +41,4 @@ interface DtfCronConfigSource {
  * @param sampleExpression one non-blank expression, for the tooltip. Which one is unspecified when
  *   several files disagree; the popup shows them all.
  */
-data class CronSummary(
-    val anyNonBlank: Boolean,
-    val sampleExpression: String?,
-)
+data class CronSummary(val anyNonBlank: Boolean, val sampleExpression: String?)

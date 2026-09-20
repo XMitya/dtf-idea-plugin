@@ -18,14 +18,13 @@ import com.xmitya.ideadtf.model.DtfTaskDefResolver
  */
 class TaskTargetPresenter(private val project: Project) {
 
-    fun present(tasks: List<PsiClass>): List<NavigableTaskTarget> =
-        tasks.map { taskClass ->
-            val anchor = sourceAnchorOf(taskClass)
-            NavigableTaskTarget(
-                pointer = SmartPointerManager.getInstance(project).createSmartPsiElementPointer(anchor),
-                presentation = presentationFor(taskClass, anchor),
-            )
-        }
+    fun present(tasks: List<PsiClass>): List<NavigableTaskTarget> = tasks.map { taskClass ->
+        val anchor = sourceAnchorOf(taskClass)
+        NavigableTaskTarget(
+            pointer = SmartPointerManager.getInstance(project).createSmartPsiElementPointer(anchor),
+            presentation = presentationFor(taskClass, anchor),
+        )
+    }
 
     /**
      * The row carries the task name as well as the class, because that is what the schedule call
@@ -55,8 +54,7 @@ class TaskTargetPresenter(private val project: Project) {
      * A Kotlin class reaches us as a light class whose range points at the generated element, so
      * both the popup's `file:line` and the jump would otherwise be off.
      */
-    private fun sourceAnchorOf(taskClass: PsiClass): PsiElement =
-        taskClass.navigationElement?.takeIf { it.isValid } ?: taskClass
+    private fun sourceAnchorOf(taskClass: PsiClass): PsiElement = taskClass.navigationElement?.takeIf { it.isValid } ?: taskClass
 
     /** `ScanFileTask.kt:7`, the thing you actually scan the list for. */
     private fun locationOf(anchor: PsiElement): String? {

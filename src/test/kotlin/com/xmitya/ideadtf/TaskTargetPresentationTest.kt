@@ -91,16 +91,15 @@ class TaskTargetPresentationTest : DtfFixtureTestCase() {
         assertEquals("ScanFileTask.kt:6", target.presentation.locationText)
     }
 
-    private fun present(): List<NavigableTaskTarget> =
-        ReadAction.compute<List<NavigableTaskTarget>, RuntimeException> {
-            val leaves = mutableListOf<PsiElement>()
-            myFixture.file.accept(object : PsiRecursiveElementWalkingVisitor() {
-                override fun visitElement(element: PsiElement) {
-                    if (element.firstChild == null) leaves += element
-                    super.visitElement(element)
-                }
-            })
-            val call = leaves.firstNotNullOf { DtfScheduleMarkers.scheduleCallAt(it) }
-            TaskTargetPresenter(project).present(ScheduledTaskSearcher(project).findTasks(call))
-        }
+    private fun present(): List<NavigableTaskTarget> = ReadAction.compute<List<NavigableTaskTarget>, RuntimeException> {
+        val leaves = mutableListOf<PsiElement>()
+        myFixture.file.accept(object : PsiRecursiveElementWalkingVisitor() {
+            override fun visitElement(element: PsiElement) {
+                if (element.firstChild == null) leaves += element
+                super.visitElement(element)
+            }
+        })
+        val call = leaves.firstNotNullOf { DtfScheduleMarkers.scheduleCallAt(it) }
+        TaskTargetPresenter(project).present(ScheduledTaskSearcher(project).findTasks(call))
+    }
 }

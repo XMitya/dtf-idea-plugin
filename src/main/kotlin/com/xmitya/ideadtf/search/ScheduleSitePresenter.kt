@@ -18,14 +18,13 @@ import org.jetbrains.uast.toUElement
  */
 class ScheduleSitePresenter(private val project: Project) {
 
-    fun present(sites: List<ScheduleCallSite>): List<NavigableScheduleSite> =
-        sites.map { site ->
-            NavigableScheduleSite(
-                pointer = SmartPointerManager.getInstance(project).createSmartPsiElementPointer(site.element),
-                presentation = presentationFor(site),
-                tier = site.tier,
-            )
-        }
+    fun present(sites: List<ScheduleCallSite>): List<NavigableScheduleSite> = sites.map { site ->
+        NavigableScheduleSite(
+            pointer = SmartPointerManager.getInstance(project).createSmartPsiElementPointer(site.element),
+            presentation = presentationFor(site),
+            tier = site.tier,
+        )
+    }
 
     private fun presentationFor(site: ScheduleCallSite): TargetPresentation {
         val enclosing = generateSequence(site.element.toUElement()) { it.uastParent }

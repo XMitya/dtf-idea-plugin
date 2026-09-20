@@ -61,12 +61,7 @@ class ScheduledTaskSearcher(private val project: Project) {
      * wherever it appears - which is the mirror of the forward direction reporting one call site
      * under two tasks.
      */
-    private fun collectFrom(
-        argument: UExpression,
-        found: MutableMap<String, PsiClass>,
-        depth: Int,
-        scope: GlobalSearchScope,
-    ) {
+    private fun collectFrom(argument: UExpression, found: MutableMap<String, PsiClass>, depth: Int, scope: GlobalSearchScope) {
         if (depth > maxDepth) return
         for (child in nonStructuralChildren(argument)) {
             collectFromSingle(child, found, depth, scope)
@@ -77,12 +72,7 @@ class ScheduledTaskSearcher(private val project: Project) {
      * One branch of [collectFrom], in the order the shapes are cheapest to decide: the task's own
      * `getDef()`, a local variable standing in for a definition, and the definition itself.
      */
-    private fun collectFromSingle(
-        argument: UExpression,
-        found: MutableMap<String, PsiClass>,
-        depth: Int,
-        scope: GlobalSearchScope,
-    ) {
+    private fun collectFromSingle(argument: UExpression, found: MutableMap<String, PsiClass>, depth: Int, scope: GlobalSearchScope) {
         ProgressManager.checkCanceled()
 
         if (CallArgumentMatcher.resolvesToGetDef(argument)) {
@@ -94,7 +84,9 @@ class ScheduledTaskSearcher(private val project: Project) {
         when {
             // Inside a wrapper's own forward the definition belongs to whoever called it.
             resolved is PsiParameter -> return
+
             resolved is PsiLocalVariable -> collectFromLocal(resolved, found, depth, scope)
+
             else -> collectOwnersOf(resolved, found, scope)
         }
     }
@@ -105,11 +97,7 @@ class ScheduledTaskSearcher(private val project: Project) {
      * When that class is an abstract base the self-reschedule is inherited, so every concrete task
      * below it is a genuine answer.
      */
-    private fun collectSelfScheduled(
-        argument: UExpression,
-        found: MutableMap<String, PsiClass>,
-        scope: GlobalSearchScope,
-    ) {
+    private fun collectSelfScheduled(argument: UExpression, found: MutableMap<String, PsiClass>, scope: GlobalSearchScope) {
         val owner = enclosingClassOf(argument) ?: return
         collectClassOrInheritors(owner, found, scope)
     }
@@ -120,12 +108,7 @@ class ScheduledTaskSearcher(private val project: Project) {
      * The initializer goes back through [collectFrom], which unwraps a conditional the same way it
      * does one written straight into the argument.
      */
-    private fun collectFromLocal(
-        variable: PsiLocalVariable,
-        found: MutableMap<String, PsiClass>,
-        depth: Int,
-        scope: GlobalSearchScope,
-    ) {
+    private fun collectFromLocal(variable: PsiLocalVariable, found: MutableMap<String, PsiClass>, depth: Int, scope: GlobalSearchScope) {
         val uVariable = variable.toUElementOfType<UVariable>()
             ?: variable.navigationElement?.takeIf { it.isValid }?.toUElementOfType<UVariable>()
             ?: return
@@ -145,11 +128,7 @@ class ScheduledTaskSearcher(private val project: Project) {
      * references to it that sit inside a `getDef()`. Searching the references of one constant beats
      * the alternative of walking every `Task` in the project and resolving its definition.
      */
-    private fun collectOwnersOf(
-        declaration: PsiElement,
-        found: MutableMap<String, PsiClass>,
-        scope: GlobalSearchScope,
-    ) {
+    private fun collectOwnersOf(declaration: PsiElement, found: MutableMap<String, PsiClass>, scope: GlobalSearchScope) {
         val anchors = DtfTaskDefResolver.anchorsFor(declaration)
 
         val owner = (declaration as? PsiMember)?.containingClass
@@ -183,10 +162,9 @@ class ScheduledTaskSearcher(private val project: Project) {
      * A Kotlin `val` is reachable as a light field, as its generated accessor and as the `KtProperty`
      * behind both, and which one you get depends on who resolved it.
      */
-    private fun isSameDeclaration(one: PsiElement, other: PsiElement): Boolean =
-        one === other ||
-            one.navigationElement === other.navigationElement ||
-            one.isEquivalentTo(other)
+    private fun isSameDeclaration(one: PsiElement, other: PsiElement): Boolean = one === other ||
+        one.navigationElement === other.navigationElement ||
+        one.isEquivalentTo(other)
 
     /** The class of the `getDef()` that [reference] sits in, if it sits in one. */
     private fun getDefOwnerOf(reference: PsiElement): PsiClass? {
@@ -201,11 +179,7 @@ class ScheduledTaskSearcher(private val project: Project) {
      * [psiClass] when it is a task in its own right, and every concrete task below it when it is
      * the abstract base that holds the `getDef()` or the self-reschedule.
      */
-    private fun collectClassOrInheritors(
-        psiClass: PsiClass,
-        found: MutableMap<String, PsiClass>,
-        scope: GlobalSearchScope,
-    ) {
+    private fun collectClassOrInheritors(psiClass: PsiClass, found: MutableMap<String, PsiClass>, scope: GlobalSearchScope) {
         if (DtfTaskModel.isMarkableTask(psiClass)) {
             collect(psiClass, found)
             return
@@ -218,11 +192,10 @@ class ScheduledTaskSearcher(private val project: Project) {
         }
     }
 
-    private fun enclosingClassOf(element: UElement): PsiClass? =
-        generateSequence<UElement>(element) { it.uastParent }
-            .filterIsInstance<UClass>()
-            .firstOrNull()
-            ?.javaPsi
+    private fun enclosingClassOf(element: UElement): PsiClass? = generateSequence<UElement>(element) { it.uastParent }
+        .filterIsInstance<UClass>()
+        .firstOrNull()
+        ?.javaPsi
 
     private fun collect(taskClass: PsiClass, found: MutableMap<String, PsiClass>) {
         val key = taskClass.qualifiedName ?: return

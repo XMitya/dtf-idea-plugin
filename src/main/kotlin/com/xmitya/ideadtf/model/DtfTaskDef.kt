@@ -12,10 +12,7 @@ import com.intellij.psi.PsiElement
  * @param taskName the task's identity string, when it could be read off the definition. Used for
  *   presentation only.
  */
-data class DtfTaskDef(
-    val anchors: List<PsiElement>,
-    val taskName: String?,
-) {
+data class DtfTaskDef(val anchors: List<PsiElement>, val taskName: String?) {
     val isResolved: Boolean get() = anchors.isNotEmpty()
 
     companion object {

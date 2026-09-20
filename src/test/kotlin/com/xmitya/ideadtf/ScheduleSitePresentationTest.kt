@@ -49,9 +49,8 @@ class ScheduleSitePresentationTest : DtfFixtureTestCase() {
         assertEquals("Caller.java:10", site.presentation.locationText)
     }
 
-    private fun present(): List<NavigableScheduleSite> =
-        ReadAction.compute<List<NavigableScheduleSite>, RuntimeException> {
-            val sites = ScheduleCallSearcher(project).findScheduleSites(findClass("app.HelloTask"))
-            ScheduleSitePresenter(project).present(sites)
-        }
+    private fun present(): List<NavigableScheduleSite> = ReadAction.compute<List<NavigableScheduleSite>, RuntimeException> {
+        val sites = ScheduleCallSearcher(project).findScheduleSites(findClass("app.HelloTask"))
+        ScheduleSitePresenter(project).present(sites)
+    }
 }

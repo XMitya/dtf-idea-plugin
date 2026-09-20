@@ -60,13 +60,18 @@ class DtfTaskLineMarkerProvider : LineMarkerProviderDescriptor() {
             is CronMark.Cron -> when {
                 taskName != null && !cron.expression.isNullOrEmpty() ->
                     DtfBundle.message("dtf.gutter.cron.tooltip.expression", taskName, cron.expression)
+
                 taskName != null -> DtfBundle.message("dtf.gutter.cron.tooltip.named", taskName)
+
                 else -> DtfBundle.message("dtf.gutter.cron.tooltip")
             }
 
             CronMark.None ->
-                if (taskName != null) DtfBundle.message("dtf.gutter.tooltip.named", taskName)
-                else DtfBundle.message("dtf.gutter.tooltip")
+                if (taskName != null) {
+                    DtfBundle.message("dtf.gutter.tooltip.named", taskName)
+                } else {
+                    DtfBundle.message("dtf.gutter.tooltip")
+                }
         }
     }
 }

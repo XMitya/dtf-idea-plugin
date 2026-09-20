@@ -116,10 +116,9 @@ class DtfTaskTreePanel(private val project: Project) : SimpleToolWindowPanel(tru
         if (snapshot.modules.size == 1) tree.expandPath(TreePath(arrayOf(root, root.getChildAt(0))))
     }
 
-    private fun selectedEntries(): List<DtfTaskEntry> =
-        tree.selectionPaths.orEmpty().mapNotNull {
-            ((it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? DtfTaskEntry)
-        }
+    private fun selectedEntries(): List<DtfTaskEntry> = tree.selectionPaths.orEmpty().mapNotNull {
+        ((it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? DtfTaskEntry)
+    }
 
     private fun createToolbar(): JComponent {
         // The header variants, which is what gives the paired chevrons and the same shortcuts the
@@ -136,11 +135,12 @@ class DtfTaskTreePanel(private val project: Project) : SimpleToolWindowPanel(tru
         return toolbar.component
     }
 
-    private inner class RefreshAction : DumbAwareAction(
-        { DtfBundle.message("dtf.toolwindow.refresh") },
-        { DtfBundle.message("dtf.toolwindow.refresh.description") },
-        AllIcons.Actions.Refresh,
-    ) {
+    private inner class RefreshAction :
+        DumbAwareAction(
+            { DtfBundle.message("dtf.toolwindow.refresh") },
+            { DtfBundle.message("dtf.toolwindow.refresh.description") },
+            AllIcons.Actions.Refresh,
+        ) {
         override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
         override fun actionPerformed(e: AnActionEvent) = refresh()

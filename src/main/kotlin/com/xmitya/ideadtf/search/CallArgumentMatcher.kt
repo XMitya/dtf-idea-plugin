@@ -33,8 +33,7 @@ object CallArgumentMatcher {
     /** A call, together with the method it resolves to, for which [uRef] is argument 0. */
     data class Arg0Call(val call: UCallExpression, val method: PsiMethod)
 
-    fun asExpression(psi: PsiElement): UExpression? =
-        psi.toUElementOfType<UExpression>() ?: getUParentForIdentifier(psi) as? UExpression
+    fun asExpression(psi: PsiElement): UExpression? = psi.toUElementOfType<UExpression>() ?: getUParentForIdentifier(psi) as? UExpression
 
     /**
      * The call that receives [uRef] as its first argument, if any.

@@ -12,16 +12,16 @@ import com.intellij.psi.util.CachedValuesManager
 import com.intellij.psi.util.InheritanceUtil
 import com.xmitya.ideadtf.DtfFqns
 import org.jetbrains.uast.UCallExpression
+import org.jetbrains.uast.UElement
 import org.jetbrains.uast.UExpression
-import org.jetbrains.uast.UVariable
 import org.jetbrains.uast.UMethod
 import org.jetbrains.uast.UParenthesizedExpression
 import org.jetbrains.uast.UQualifiedReferenceExpression
 import org.jetbrains.uast.UReferenceExpression
 import org.jetbrains.uast.UReturnExpression
-import org.jetbrains.uast.UElement
-import org.jetbrains.uast.nonStructuralChildren
+import org.jetbrains.uast.UVariable
 import org.jetbrains.uast.evaluateString
+import org.jetbrains.uast.nonStructuralChildren
 import org.jetbrains.uast.toUElementOfType
 import org.jetbrains.uast.visitor.AbstractUastVisitor
 
@@ -41,8 +41,7 @@ object DtfTaskDefResolver {
      * so the walk through `getDef()` is worth keeping. The result holds PSI, hence a cache that is
      * dropped on any PSI change - including one in the file the constant lives in.
      */
-    fun resolveCached(psiClass: PsiClass): DtfTaskDef =
-        CachedValuesManager.getProjectPsiDependentCache(psiClass) { resolve(it) }
+    fun resolveCached(psiClass: PsiClass): DtfTaskDef = CachedValuesManager.getProjectPsiDependentCache(psiClass) { resolve(it) }
 
     fun resolve(psiClass: PsiClass): DtfTaskDef {
         val getDef = findGetDefMethod(psiClass) ?: return DtfTaskDef.EMPTY
@@ -65,17 +64,19 @@ object DtfTaskDefResolver {
             anchors += anchorsFor(resolved)
             if (taskName == null) taskName = taskNameOf(resolved)
         }
-        return if (anchors.isEmpty() && taskName == null) DtfTaskDef.EMPTY
-        else DtfTaskDef(anchors.toList(), taskName)
+        return if (anchors.isEmpty() && taskName == null) {
+            DtfTaskDef.EMPTY
+        } else {
+            DtfTaskDef(anchors.toList(), taskName)
+        }
     }
 
     /**
      * The `getDef()` that actually has a body: the class's own override, or an inherited one when
      * the definition lives in a base class.
      */
-    fun findGetDefMethod(psiClass: PsiClass): PsiMethod? =
-        psiClass.findMethodsByName(DtfFqns.GET_DEF, true)
-            .firstOrNull { !it.hasModifierProperty(PsiModifier.ABSTRACT) && it.parameterList.isEmpty }
+    fun findGetDefMethod(psiClass: PsiClass): PsiMethod? = psiClass.findMethodsByName(DtfFqns.GET_DEF, true)
+        .firstOrNull { !it.hasModifierProperty(PsiModifier.ABSTRACT) && it.parameterList.isEmpty }
 
     /**
      * Every expression `getDef()` can hand back.
@@ -105,8 +106,11 @@ object DtfTaskDefResolver {
      */
     private fun isTaskDefDeclaration(element: PsiElement): Boolean = when (element) {
         is PsiField -> InheritanceUtil.isInheritor(element.type, DtfFqns.TASK_DEF)
-        is PsiMethod -> element.parameterList.isEmpty &&
-            element.returnType?.let { InheritanceUtil.isInheritor(it, DtfFqns.TASK_DEF) } == true
+
+        is PsiMethod ->
+            element.parameterList.isEmpty &&
+                element.returnType?.let { InheritanceUtil.isInheritor(it, DtfFqns.TASK_DEF) } == true
+
         else -> false
     }
 
@@ -135,6 +139,7 @@ object DtfTaskDefResolver {
                     ?.filter { it.parameterList.isEmpty }
                     ?.forEach { anchors += it }
             }
+
             is PsiMethod -> {
                 // The backing field of a companion-object val lives on the outer class, not the
                 // companion, so both are worth a look.
@@ -154,11 +159,10 @@ object DtfTaskDefResolver {
      * Kotlin's synthetic-property access (`task.def`) is only reachable through the method-
      * references search, not the plain reference search.
      */
-    fun referencesTo(anchor: PsiElement, scope: GlobalSearchScope): List<PsiElement> =
-        when (anchor) {
-            is PsiMethod -> MethodReferencesSearch.search(anchor, scope, true).findAll()
-            else -> ReferencesSearch.search(anchor, scope).findAll()
-        }.map { it.element }
+    fun referencesTo(anchor: PsiElement, scope: GlobalSearchScope): List<PsiElement> = when (anchor) {
+        is PsiMethod -> MethodReferencesSearch.search(anchor, scope, true).findAll()
+        else -> ReferencesSearch.search(anchor, scope).findAll()
+    }.map { it.element }
 
     /**
      * Digs the call out of an expression.

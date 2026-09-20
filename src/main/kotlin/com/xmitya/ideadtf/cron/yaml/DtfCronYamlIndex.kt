@@ -33,11 +33,9 @@ class DtfCronYamlIndex : FileBasedIndexExtension<String, String>() {
 
     override fun getValueExternalizer(): DataExternalizer<String> = EnumeratorStringDescriptor.INSTANCE
 
-    override fun getInputFilter(): FileBasedIndex.InputFilter =
-        DefaultFileTypeSpecificInputFilter(YAMLFileType.YML)
+    override fun getInputFilter(): FileBasedIndex.InputFilter = DefaultFileTypeSpecificInputFilter(YAMLFileType.YML)
 
-    override fun getIndexer(): DataIndexer<String, String, FileContent> =
-        DataIndexer { content -> index(content) }
+    override fun getIndexer(): DataIndexer<String, String, FileContent> = DataIndexer { content -> index(content) }
 
     private fun index(content: FileContent): Map<String, String> {
         // A text test before any parsing, so that a repository full of unrelated YAML - manifests,

@@ -160,6 +160,5 @@ class DtfTaskGutterTest : DtfFixtureTestCase() {
         )
     }
 
-    private fun taskGutters(): List<GutterMark> =
-        myFixture.findAllGutters().filter { it.icon === DtfIcons.TaskGutter }
+    private fun taskGutters(): List<GutterMark> = myFixture.findAllGutters().filter { it.icon === DtfIcons.TaskGutter }
 }

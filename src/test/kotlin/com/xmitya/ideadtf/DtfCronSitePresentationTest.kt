@@ -54,10 +54,9 @@ class DtfCronSitePresentationTest : DtfFixtureTestCase() {
         )
     }
 
-    private fun present(): List<NavigableCronSite> =
-        ReadAction.compute<List<NavigableCronSite>, RuntimeException> {
-            val scope = GlobalSearchScope.projectScope(project)
-            val found = DtfCronConfigSource.EP.extensionList.flatMap { it.findSites(project, "HELLO_TASK", scope) }
-            CronSitePresenter(project).present(found)
-        }
+    private fun present(): List<NavigableCronSite> = ReadAction.compute<List<NavigableCronSite>, RuntimeException> {
+        val scope = GlobalSearchScope.projectScope(project)
+        val found = DtfCronConfigSource.EP.extensionList.flatMap { it.findSites(project, "HELLO_TASK", scope) }
+        CronSitePresenter(project).present(found)
+    }
 }

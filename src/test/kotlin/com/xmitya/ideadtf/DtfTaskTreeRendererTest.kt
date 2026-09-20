@@ -67,7 +67,13 @@ class DtfTaskTreeRendererTest : DtfFixtureTestCase() {
 
     private fun render(userObject: Any): String {
         renderer.getTreeCellRendererComponent(
-            tree, DefaultMutableTreeNode(userObject), false, false, true, 0, false,
+            tree,
+            DefaultMutableTreeNode(userObject),
+            false,
+            false,
+            true,
+            0,
+            false,
         )
         return renderer.toString()
     }
@@ -100,10 +106,9 @@ class DtfTaskTreeRendererTest : DtfFixtureTestCase() {
         )
     }
 
-    private fun snapshot(): DtfTaskSnapshot =
-        ReadAction.compute<DtfTaskSnapshot, RuntimeException> {
-            DtfTaskSnapshotBuilder(project).build(DtfTaskSearcher(project).findAllTasks(), stamp = 1L)
-        }
+    private fun snapshot(): DtfTaskSnapshot = ReadAction.compute<DtfTaskSnapshot, RuntimeException> {
+        DtfTaskSnapshotBuilder(project).build(DtfTaskSearcher(project).findAllTasks(), stamp = 1L)
+    }
 
     private fun firstTask() = snapshot().modules.single().tasks.first()
 }

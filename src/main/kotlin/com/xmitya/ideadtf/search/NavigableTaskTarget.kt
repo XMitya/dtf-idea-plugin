@@ -11,10 +11,7 @@ import com.intellij.psi.SmartPsiElementPointer
  * already-rendered presentation rather than live PSI, so that showing the popup and navigating from
  * it never touch PSI on the UI thread.
  */
-class NavigableTaskTarget(
-    private val pointer: SmartPsiElementPointer<*>,
-    val presentation: TargetPresentation,
-) {
+class NavigableTaskTarget(private val pointer: SmartPsiElementPointer<*>, val presentation: TargetPresentation) {
     fun navigate() {
         val file = pointer.virtualFile ?: return
         val offset = pointer.range?.startOffset ?: return

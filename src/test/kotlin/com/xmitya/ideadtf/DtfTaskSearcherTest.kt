@@ -135,8 +135,7 @@ class DtfTaskSearcherTest : DtfFixtureTestCase() {
         assertEmpty(names())
     }
 
-    private fun names(): List<String> =
-        ReadAction.compute<List<String>, RuntimeException> {
-            DtfTaskSearcher(project).findAllTasks().map { it.name.orEmpty() }
-        }
+    private fun names(): List<String> = ReadAction.compute<List<String>, RuntimeException> {
+        DtfTaskSearcher(project).findAllTasks().map { it.name.orEmpty() }
+    }
 }

@@ -1,8 +1,8 @@
 package com.xmitya.ideadtf
 
 import com.intellij.openapi.application.ReadAction
-import com.xmitya.ideadtf.search.ScheduleCallSite
 import com.xmitya.ideadtf.search.ScheduleCallSearcher
+import com.xmitya.ideadtf.search.ScheduleCallSite
 import com.xmitya.ideadtf.search.ScheduleTier
 
 /** Finding the places a task is scheduled, across the call-site shapes that occur in real code. */
@@ -474,8 +474,7 @@ class ScheduleCallSearcherTest : DtfFixtureTestCase() {
         )
     }
 
-    private fun search(taskClassName: String): List<ScheduleCallSite> =
-        ReadAction.compute<List<ScheduleCallSite>, RuntimeException> {
-            ScheduleCallSearcher(project).findScheduleSites(findClass(taskClassName))
-        }
+    private fun search(taskClassName: String): List<ScheduleCallSite> = ReadAction.compute<List<ScheduleCallSite>, RuntimeException> {
+        ScheduleCallSearcher(project).findScheduleSites(findClass(taskClassName))
+    }
 }

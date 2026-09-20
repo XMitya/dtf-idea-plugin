@@ -30,12 +30,16 @@ class CronConfigNavigationHandler : GutterIconNavigationHandler<PsiElement> {
 
     override fun navigate(event: MouseEvent, element: PsiElement) {
         val project = element.project
-        val taskClass = DtfTaskMarkers.taskClassAt(element) ?: return
-
+        // Before anything else: recognising the task resolves the supertype, which reads an index.
+        // The provider is not DumbAware, so no icon is *drawn* while indexing - but one drawn just
+        // before indexing started is still on screen and still clickable, and this is what keeps
+        // that click from throwing IndexNotReadyException.
         if (DumbService.isDumb(project)) {
             showMessage(event, DtfBundle.message("dtf.popup.dumb"))
             return
         }
+
+        val taskClass = DtfTaskMarkers.taskClassAt(element) ?: return
 
         val sites = try {
             // Opens a read action of its own, so nothing here needs to wrap one.
