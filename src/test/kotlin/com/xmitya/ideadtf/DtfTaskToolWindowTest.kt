@@ -1,12 +1,14 @@
 package com.xmitya.ideadtf
 
 import com.intellij.ide.ui.IconMapperBean
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.wm.ToolWindowAnchor
 import com.intellij.openapi.wm.ToolWindowEP
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.treeStructure.Tree
 import com.xmitya.ideadtf.toolwindow.DtfTaskToolWindowFactory
 import com.xmitya.ideadtf.toolwindow.DtfTaskTreePanel
+import java.util.concurrent.TimeUnit
 
 /**
  * The descriptor wiring, which nothing else would catch.
@@ -40,6 +42,21 @@ class DtfTaskToolWindowTest : DtfFixtureTestCase() {
 
     fun testStripeButtonIsAvailableWhenDtfIsOnTheClasspath() {
         assertTrue(DtfTaskToolWindowFactory().shouldBeAvailable(project))
+    }
+
+    /**
+     * Off the EDT, with no read action in sight - which is how the platform actually calls it, from
+     * the tool window initializer's coroutine. Calling it from the test thread proves nothing: the
+     * EDT holds the write-intent lock and so hands the index access the read access it needs for
+     * free. Without an explicit read action this throws, the platform logs "Cannot process toolwindow
+     * DTF Tasks", and the tool window is not registered at all.
+     */
+    fun testStripeAvailabilityIsComputedWithoutAnAmbientReadAction() {
+        val available = ApplicationManager.getApplication()
+            .executeOnPooledThread<Boolean> { DtfTaskToolWindowFactory().shouldBeAvailable(project) }
+            .get(1, TimeUnit.MINUTES)
+
+        assertTrue(available)
     }
 
     /**
