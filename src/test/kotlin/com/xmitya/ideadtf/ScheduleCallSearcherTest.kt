@@ -314,6 +314,153 @@ class ScheduleCallSearcherTest : DtfFixtureTestCase() {
     }
 
     /**
+     * The shape a Kafka listener actually has: the conditional sits inside a `forEach` lambda, so
+     * the reference's first enclosing call is the `forEach` rather than anything that schedules.
+     * Climbing past the local variable into it is what used to lose this call site entirely.
+     */
+    fun testTernaryInsideLambdaThroughPrivateHelper() {
+        addJavaTaskWithOwnConstant()
+        addOtherJavaTask()
+        myFixture.addFileToProject(
+            "NewAppFileEventListener.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+            import com.distributed_task_framework.model.TaskDef;
+            import com.distributed_task_framework.service.DistributedTaskService;
+            import java.util.List;
+
+            public class NewAppFileEventListener {
+                private DistributedTaskService distributedTaskService;
+
+                public void onReceive(List<String> events) {
+                    events.forEach(event -> {
+                        var taskDef = event.isEmpty() ? HelloTask.HELLO : OtherTask.OTHER;
+                        try {
+                            schedule(taskDef, event);
+                        } catch (Exception e) {
+                            // ignored
+                        }
+                    });
+                }
+
+                void schedule(TaskDef<String> taskDef, String payload) throws Exception {
+                    distributedTaskService.schedule(taskDef, ExecutionContext.simple(payload));
+                }
+            }
+            """.trimIndent(),
+        )
+        for (taskName in listOf("HelloTask", "OtherTask")) {
+            val sites = search(taskName)
+            assertEquals("expected the helper call for " + taskName + ", got " + sites.map { it.element.text }, 1, sites.size)
+            assertTrue(sites.single().element.text.contains("schedule(taskDef"))
+        }
+    }
+
+    /** The same shape in Kotlin, where the lambda is the receiver-less `forEach { }` block. */
+    fun testConditionalInsideKotlinLambda() {
+        addJavaTaskWithOwnConstant()
+        addOtherJavaTask()
+        myFixture.addFileToProject(
+            "KotlinListener.kt",
+            """
+            import com.distributed_task_framework.model.ExecutionContext
+            import com.distributed_task_framework.service.DistributedTaskService
+
+            class KotlinListener(private val distributedTaskService: DistributedTaskService) {
+                fun onReceive(events: List<String>) {
+                    events.forEach { event ->
+                        val taskDef = if (event.isEmpty()) HelloTask.HELLO else OtherTask.OTHER
+                        distributedTaskService.schedule(taskDef, ExecutionContext.simple(event))
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+        for (taskName in listOf("HelloTask", "OtherTask")) {
+            val sites = search(taskName)
+            assertEquals("expected one call for " + taskName + ", got " + sites.map { it.element.text }, 1, sites.size)
+            assertEquals(ScheduleTier.SERVICE, sites.single().tier)
+        }
+    }
+
+    /**
+     * A project wrapper puts the definition wherever it likes; `createTask(entity, taskDef)` is as
+     * common as the other way round.
+     */
+    fun testWrapperWithTaskDefAtNonZeroParameter() {
+        addJavaTaskWithOwnConstant()
+        addOtherJavaTask()
+        myFixture.addFileToProject(
+            "AggregatorListener.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+            import com.distributed_task_framework.model.TaskDef;
+            import com.distributed_task_framework.service.DistributedTaskService;
+            import java.util.List;
+
+            public class AggregatorListener {
+                private DistributedTaskService distributedTaskService;
+
+                public void onReceive(List<String> events) {
+                    events.forEach(event -> {
+                        var taskDef = event.isEmpty() ? HelloTask.HELLO : OtherTask.OTHER;
+                        try {
+                            createTask(event, taskDef);
+                        } catch (Exception e) {
+                            // ignored
+                        }
+                    });
+                }
+
+                private void createTask(String payload, TaskDef<String> taskDef) throws Exception {
+                    distributedTaskService.schedule(taskDef, ExecutionContext.simple(payload));
+                }
+            }
+            """.trimIndent(),
+        )
+        for (taskName in listOf("HelloTask", "OtherTask")) {
+            val sites = search(taskName)
+            assertEquals("expected the createTask call for " + taskName + ", got " + sites.map { it.element.text }, 1, sites.size)
+            assertEquals(ScheduleTier.WRAPPER, sites.single().tier)
+            assertTrue(sites.single().element.text.contains("createTask(event, taskDef)"))
+        }
+    }
+
+    /**
+     * Taking a TaskDef is not launching one. Without checking what the method does with it, every
+     * logger, mapper and validator that accepts a definition would be reported as a call site - and
+     * accepting the definition at any position, not just the first, would multiply that noise.
+     */
+    fun testMethodTakingTaskDefWithoutForwardingIsIgnored() {
+        addJavaTaskWithOwnConstant()
+        myFixture.addFileToProject(
+            "DefLogger.java",
+            """
+            import com.distributed_task_framework.model.TaskDef;
+
+            public class DefLogger {
+                public void scheduleAudit(TaskDef<String> taskDef, String payload) {
+                    System.out.println(taskDef.getTaskName() + payload);
+                }
+            }
+            """.trimIndent(),
+        )
+        myFixture.addFileToProject(
+            "AuditCaller.java",
+            """
+            public class AuditCaller {
+                private DefLogger defLogger;
+
+                public void run() {
+                    defLogger.scheduleAudit(HelloTask.HELLO, "x");
+                }
+            }
+            """.trimIndent(),
+        )
+        assertEmpty(search("HelloTask"))
+    }
+
+    /**
      * Kotlin named arguments put the TaskDef in second position in the source, which is exactly
      * what indexing valueArguments would get wrong.
      */
@@ -337,9 +484,12 @@ class ScheduleCallSearcherTest : DtfFixtureTestCase() {
             """
             import com.distributed_task_framework.model.ExecutionContext
             import com.distributed_task_framework.model.TaskDef
+            import com.distributed_task_framework.service.DistributedTaskService
 
-            class KotlinScheduler {
-                fun <T> schedule(taskDef: TaskDef<T>, context: ExecutionContext<T>) = Unit
+            class KotlinScheduler(private val distributedTaskService: DistributedTaskService) {
+                fun <T> schedule(taskDef: TaskDef<T>, context: ExecutionContext<T>) {
+                    distributedTaskService.schedule(taskDef, context)
+                }
 
                 fun run() {
                     schedule(context = ExecutionContext.simple("x"), taskDef = NamedTask.TASK_DEF)
@@ -469,6 +619,23 @@ class ScheduleCallSearcherTest : DtfFixtureTestCase() {
 
                 @Override
                 public TaskDef<String> getDef() { return HELLO; }
+            }
+            """.trimIndent(),
+        )
+    }
+
+    private fun addOtherJavaTask() {
+        myFixture.addFileToProject(
+            "OtherTask.java",
+            """
+            import com.distributed_task_framework.model.TaskDef;
+            import com.distributed_task_framework.task.Task;
+
+            public class OtherTask implements Task<String> {
+                public static final TaskDef<String> OTHER = TaskDef.privateTaskDef("OTHER", String.class);
+
+                @Override
+                public TaskDef<String> getDef() { return OTHER; }
             }
             """.trimIndent(),
         )

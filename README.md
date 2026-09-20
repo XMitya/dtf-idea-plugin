@@ -80,6 +80,8 @@ never used as a signal, only the declared `TaskDef` type.
 | Local variable, incl. conditionals | `val d = if (x) A.DEF else B.DEF; schedule(d, ctx)` — reported for *both* tasks |
 | Project-local wrapper | `sneakyScheduler.schedule(DEF, ctx)`, recognised by the parameter type, not by name |
 | Private helper | `schedule(taskDef, msg)` forwarding to the framework |
+| Helper taking the definition elsewhere | `createTask(event, taskDef)`, `scheduleAggregate(name, props, DEF)` |
+| Anything of the above inside a lambda | `events.forEach(e -> { var d = flag ? A.DEF : B.DEF; schedule(d, e); })` |
 | Task that schedules itself | `sendVkNotificationTask.schedule(dto, key)`, where the base fills in the `TaskDef` |
 | Kotlin named arguments | `schedule(context = ctx, taskDef = DEF)` |
 
@@ -98,6 +100,7 @@ site itself.
 | `val d = if (x) A.DEF else B.DEF; schedule(d, ctx)` | *both* tasks |
 | `schedule(flag ? A.DEF : B.DEF, ctx)` | likewise, with no local to go through |
 | `sneakyScheduler.schedule(DEF, ctx)` | through the project-local wrapper |
+| `schedule(taskDef, ctx)` inside the wrapper itself | every task its callers pass in |
 | `schedule(context = ctx, taskDef = DEF)` | Kotlin named arguments, in any order |
 | `sendVkNotificationTask.schedule(dto, key)` | the receiver's own type, no `TaskDef` in sight |
 
@@ -125,18 +128,23 @@ file are searched separately, which is how profiles are usually written.
   still appears; the list is empty.
 - **A receiver typed as a shared base** (`anySchedulableTask.schedule(...)`) is not attributed to
   any single task, because it could be any of them. Neither direction reports it.
-- **Reverse navigation needs the definition to be visible at the call.** Inside a wrapper's own
-  forward — `schedule(taskDef, ctx)`, where `taskDef` is the method's parameter — the task is
-  whatever the caller passed, so there is no icon. Reach that call from the task's own popup
-  instead: the forward direction crosses the wrapper boundary, this one stops at it.
+- **A wrapper is recognised by what it does, not by what it takes.** A project method counts as a
+  scheduler when one of its `TaskDef` parameters actually reaches a scheduling call in its own body,
+  at most one wrapper deep. That is what makes accepting the definition at *any* argument position
+  safe; a method that takes a `TaskDef` to log its name or build a key is not a call site.
+- **Inside a wrapper's own forward the definition belongs to the callers**, and that is where the
+  reverse direction goes to look — one hop, one project-wide search, on click. A wrapper called from
+  fifty places lists every task any of them passes. The forward direction still reports the caller's
+  own line rather than the wrapper's shared internals, so the two meet at different lines by design.
 - **The reverse icon keys on the method name.** A wrapper called `launch(DEF, ctx)` is still found
   going forward, which keys on the parameter type, but carries no icon going back — resolving every
   call in the file during highlighting would not be worth it.
 - **A `TaskDef` built inline at the call site** (`schedule(TaskDef.privateTaskDef(name, …), ctx)`)
   names no declaration, so there is nothing to navigate to.
-- **Dataflow is two hops deep** by design. Going forward that is one hop through a local variable
-  and one through a wrapper's parameter; coming back it is two chained locals, the wrapper
-  parameter being where the reverse direction stops rather than continues.
+- **Dataflow is two hops deep** by design: one hop through a local variable and one through a
+  wrapper's parameter, in either direction. A reference is followed through a local even when it
+  sits inside a lambda, but not out of one — the body of a lambda is a value, not an argument of
+  whatever the lambda was handed to.
 - **A group-wide `default-properties.cron` is ignored.** It sits *below* `@TaskSchedule` in the
   framework's merge order, and honouring it would put a clock on every task in the module from one
   line of YAML.

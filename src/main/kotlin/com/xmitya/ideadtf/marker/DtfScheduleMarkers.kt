@@ -86,26 +86,30 @@ object DtfScheduleMarkers {
      *
      * Two ways in. Either the receiver is itself a task, which is how the bases that expose their
      * own `schedule(message)` work and where no `TaskDef` appears at the call at all; or the call
-     * is a scheduling method and its `TaskDef` argument is a declaration we can follow.
+     * launches a task through one of its arguments and that argument is something we can follow.
      *
-     * A `TaskDef` that arrives as a method *parameter* is rejected: inside a wrapper's own forward
-     * the task is whatever the caller passed, so no answer exists here. That is also what keeps the
-     * framework-internal `schedule(TaskEntity)` out, its argument being no `TaskDef` at all.
+     * Which argument is asked of [CallArgumentMatcher.launchParameters] rather than assumed to be
+     * the first: the framework pins the definition to position 0, a project wrapper does not.
      */
     private fun identifiesATask(call: UCallExpression): Boolean {
         if (CallArgumentMatcher.receiverTask(call) != null) return true
         val method = call.resolve() ?: return false
-        if (CallArgumentMatcher.classify(method) == null) return false
-        val argument = call.getArgumentForParameter(0) ?: return false
-        // The definition can be chosen inline - `schedule(flag ? A.DEF : B.DEF, ctx)` - so the
-        // conditional has to be unwrapped before anything can be resolved.
-        return nonStructuralChildren(argument).anyMatch { isTaskDefDeclaration(it) }
+        return CallArgumentMatcher.launchParameters(method).any { index ->
+            val argument = call.getArgumentForParameter(index)
+            // The definition can be chosen inline - `schedule(flag ? A.DEF : B.DEF, ctx)` - so the
+            // conditional has to be unwrapped before anything can be resolved.
+            argument != null && nonStructuralChildren(argument).anyMatch { isTaskDefDeclaration(it) }
+        }
     }
 
     private fun isTaskDefDeclaration(argument: UExpression): Boolean {
         if (CallArgumentMatcher.resolvesToGetDef(argument)) return true
         return when (val resolved = (argument as? UReferenceExpression)?.resolve()) {
-            is PsiParameter -> false
+            // A definition arriving as a parameter is whatever the caller passed, so the answer is
+            // not here - but a wrapper that forwards it has callers to ask, and the click does. A
+            // parameter its own method does not forward leads nowhere and gets no icon, which is
+            // also what keeps the framework-internal `schedule(TaskEntity)` out.
+            is PsiParameter -> CallArgumentMatcher.isForwardedTaskDefParameter(resolved)
 
             // Covers a Java constant and a Kotlin local alike; Kotlin locals resolve to a synthetic
             // variable, which is still a PsiVariable with the declared type.

@@ -57,6 +57,9 @@ class ScheduleCallSearcher(private val project: Project) {
      * Two hops are needed by real code: a reference assigned to a local variable that is then
      * scheduled (frequently via a conditional, which is why one call site can belong to two tasks),
      * and a reference handed to a project-local helper that forwards it to the framework.
+     *
+     * The definition may sit at any argument position of such a helper; only the framework's own
+     * methods are pinned to the first one.
      */
     private fun collectFrom(
         references: List<PsiElement>,
@@ -69,15 +72,17 @@ class ScheduleCallSearcher(private val project: Project) {
             ProgressManager.checkCanceled()
             val uRef = CallArgumentMatcher.asExpression(reference) ?: continue
 
-            val arg0Call = CallArgumentMatcher.arg0CallFor(uRef)
-            if (arg0Call != null) {
-                val tier = CallArgumentMatcher.classify(arg0Call.method)
+            val argCall = CallArgumentMatcher.argCallFor(uRef)
+            if (argCall != null) {
+                val tier = CallArgumentMatcher.classify(argCall.method, argCall.parameterIndex)
                 if (tier != null) {
-                    addSite(arg0Call.call, tier, found)
+                    addSite(argCall.call, tier, found)
+                    continue
                 }
-                continue
             }
 
+            // A call that does not launch anything is not the end of the road: the reference may
+            // still be on its way into a local that a scheduling call reads further down.
             val variable = CallArgumentMatcher.initializedVariableFor(uRef) ?: continue
             collectFrom(readsOf(variable), found, depth + 1, scope)
         }
@@ -132,7 +137,7 @@ class ScheduleCallSearcher(private val project: Project) {
                 override fun visitCallExpression(node: UCallExpression): Boolean {
                     ProgressManager.checkCanceled()
                     val method = node.resolve() ?: return false
-                    val tier = CallArgumentMatcher.classify(method) ?: return false
+                    val tier = CallArgumentMatcher.classify(method, 0) ?: return false
                     val arg0 = node.getArgumentForParameter(0) ?: return false
                     if (CallArgumentMatcher.resolvesToGetDef(arg0)) {
                         addSite(node, tier, found)

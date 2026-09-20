@@ -6,9 +6,11 @@ import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiLocalVariable
 import com.intellij.psi.PsiMember
+import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiParameter
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ClassInheritorsSearch
+import com.intellij.psi.search.searches.MethodReferencesSearch
 import com.xmitya.ideadtf.DtfFqns
 import com.xmitya.ideadtf.model.DtfTaskDefResolver
 import com.xmitya.ideadtf.model.DtfTaskModel
@@ -19,6 +21,7 @@ import org.jetbrains.uast.UExpression
 import org.jetbrains.uast.UMethod
 import org.jetbrains.uast.UReferenceExpression
 import org.jetbrains.uast.UVariable
+import org.jetbrains.uast.getUCallExpression
 import org.jetbrains.uast.nonStructuralChildren
 import org.jetbrains.uast.toUElement
 import org.jetbrains.uast.toUElementOfType
@@ -29,27 +32,44 @@ import org.jetbrains.uast.toUElementOfType
  * Expects to be called inside a read action, off the EDT.
  *
  * More than one task can be the answer: a `TaskDef` held in a shared holder may be returned by
- * several tasks, and a conditional local carries one definition per branch.
+ * several tasks, a conditional local carries one definition per branch, and a wrapper's parameter
+ * is whatever each of its callers passes.
  */
 class ScheduledTaskSearcher(private val project: Project) {
 
-    /**
-     * How many local variables a definition may travel through before this gives up.
-     *
-     * Not the forward searcher's limit copied over: one of its two hops is the wrapper parameter,
-     * which in this direction is where resolution stops rather than continues. Two here means two
-     * chained locals.
-     */
+    /** How many local variables a definition may travel through, within one method, before this gives up. */
     private val maxDepth = 2
+
+    /**
+     * How many wrapper parameters a definition may be chased back through.
+     *
+     * Each one is a project-wide search for the wrapper's callers, and a chain of them multiplies
+     * that per link, so one is what a click can afford.
+     */
+    private val maxParameterHops = 1
 
     fun findTasks(call: UCallExpression): List<PsiClass> {
         val found = LinkedHashMap<String, PsiClass>()
         val scope = GlobalSearchScope.projectScope(project)
 
         CallArgumentMatcher.receiverTask(call)?.let { collect(it, found) }
-        call.getArgumentForParameter(0)?.let { collectFrom(it, found, depth = 0, scope = scope) }
+        for (index in launchParametersOf(call)) {
+            call.getArgumentForParameter(index)?.let { collectFrom(it, found, depth = 0, hops = 0, scope = scope) }
+        }
 
         return found.values.sortedBy { it.qualifiedName }
+    }
+
+    /**
+     * The argument positions worth resolving.
+     *
+     * The framework always puts the definition first, but a project wrapper puts it wherever it
+     * likes - `createTask(entity, taskDef)` is as common as the other way round - and may take
+     * several, as a saga step scheduling two branches and their join does.
+     */
+    private fun launchParametersOf(call: UCallExpression): Set<Int> {
+        val method = call.resolve() ?: return emptySet()
+        return CallArgumentMatcher.launchParameters(method)
     }
 
     /**
@@ -61,10 +81,10 @@ class ScheduledTaskSearcher(private val project: Project) {
      * wherever it appears - which is the mirror of the forward direction reporting one call site
      * under two tasks.
      */
-    private fun collectFrom(argument: UExpression, found: MutableMap<String, PsiClass>, depth: Int, scope: GlobalSearchScope) {
+    private fun collectFrom(argument: UExpression, found: MutableMap<String, PsiClass>, depth: Int, hops: Int, scope: GlobalSearchScope) {
         if (depth > maxDepth) return
         for (child in nonStructuralChildren(argument)) {
-            collectFromSingle(child, found, depth, scope)
+            collectFromSingle(child, found, depth, hops, scope)
         }
     }
 
@@ -72,7 +92,13 @@ class ScheduledTaskSearcher(private val project: Project) {
      * One branch of [collectFrom], in the order the shapes are cheapest to decide: the task's own
      * `getDef()`, a local variable standing in for a definition, and the definition itself.
      */
-    private fun collectFromSingle(argument: UExpression, found: MutableMap<String, PsiClass>, depth: Int, scope: GlobalSearchScope) {
+    private fun collectFromSingle(
+        argument: UExpression,
+        found: MutableMap<String, PsiClass>,
+        depth: Int,
+        hops: Int,
+        scope: GlobalSearchScope,
+    ) {
         ProgressManager.checkCanceled()
 
         if (CallArgumentMatcher.resolvesToGetDef(argument)) {
@@ -82,12 +108,35 @@ class ScheduledTaskSearcher(private val project: Project) {
 
         val resolved = (argument as? UReferenceExpression)?.resolve() ?: return
         when {
-            // Inside a wrapper's own forward the definition belongs to whoever called it.
-            resolved is PsiParameter -> return
-
-            resolved is PsiLocalVariable -> collectFromLocal(resolved, found, depth, scope)
-
+            resolved is PsiParameter -> collectFromParameter(resolved, found, hops, scope)
+            resolved is PsiLocalVariable -> collectFromLocal(resolved, found, depth, hops, scope)
             else -> collectOwnersOf(resolved, found, scope)
+        }
+    }
+
+    /**
+     * A wrapper's own parameter: the definition belongs to whoever called it, so the callers are
+     * where to look.
+     *
+     * Only a parameter its method actually forwards to a scheduling call qualifies, which is what
+     * keeps this off the framework's internal `schedule(TaskEntity)` and off the methods that
+     * merely read a definition rather than launch it.
+     *
+     * The local-variable budget starts over on the caller's side: it is a different method, and its
+     * own conditionals deserve the same allowance the first one had.
+     */
+    private fun collectFromParameter(parameter: PsiParameter, found: MutableMap<String, PsiClass>, hops: Int, scope: GlobalSearchScope) {
+        if (hops >= maxParameterHops) return
+        val method = parameter.declarationScope as? PsiMethod ?: return
+        val index = method.parameterList.getParameterIndex(parameter)
+        if (index < 0 || CallArgumentMatcher.classify(method, index) != ScheduleTier.WRAPPER) return
+
+        for (reference in MethodReferencesSearch.search(method, scope, true).findAll()) {
+            ProgressManager.checkCanceled()
+            val uRef = CallArgumentMatcher.asExpression(reference.element) ?: continue
+            val call = uRef.getUCallExpression() ?: continue
+            val argument = call.getArgumentForParameter(index) ?: continue
+            collectFrom(argument, found, depth = 0, hops = hops + 1, scope = scope)
         }
     }
 
@@ -108,12 +157,18 @@ class ScheduledTaskSearcher(private val project: Project) {
      * The initializer goes back through [collectFrom], which unwraps a conditional the same way it
      * does one written straight into the argument.
      */
-    private fun collectFromLocal(variable: PsiLocalVariable, found: MutableMap<String, PsiClass>, depth: Int, scope: GlobalSearchScope) {
+    private fun collectFromLocal(
+        variable: PsiLocalVariable,
+        found: MutableMap<String, PsiClass>,
+        depth: Int,
+        hops: Int,
+        scope: GlobalSearchScope,
+    ) {
         val uVariable = variable.toUElementOfType<UVariable>()
             ?: variable.navigationElement?.takeIf { it.isValid }?.toUElementOfType<UVariable>()
             ?: return
         val initializer = uVariable.uastInitializer ?: return
-        collectFrom(initializer, found, depth + 1, scope)
+        collectFrom(initializer, found, depth + 1, hops, scope)
     }
 
     /**
