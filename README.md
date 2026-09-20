@@ -104,8 +104,11 @@ Those three icons each answer a question about one task you are already looking 
 tool window answers the one they cannot — *which tasks are there at all* — as a tree of project,
 module and task. Each row is named by its `TaskDef` and carries the icon it has in the gutter, with
 the class name and, for a cron task, the expression beside it in grey; double-click or Enter opens
-the task. Typing finds a task or a module by name, reaching into collapsed modules, so nothing has
-to be opened first. The stripe button appears only in projects that have DTF on the classpath. The scan runs
+the task. A right-click carries the gutter's two questions over — *Go to Task Configuration* and *Go
+to Schedule Calls* open the same lists the icon does — and copies either name the row is known by:
+the `TaskDef` or the qualified class name. Ctrl/Cmd+C copies what the selected rows are called,
+tasks, modules and the project alike. Typing finds a task or a module by name, reaching into
+collapsed modules, so nothing has to be opened first. The stripe button appears only in projects that have DTF on the classpath. The scan runs
 when the panel is first opened, and again when it is shown after the project has changed — so
 returning to it costs nothing when nothing has moved.
 
@@ -258,6 +261,10 @@ clock in the gutter.
   search here uses.
 - **The tree groups by module**, and a task belonging to no module falls into a trailing *Outside
   modules* group. Modules without tasks are not shown at all.
+- **The tree's two navigation entries work on one row.** Two selected tasks are two lists, and
+  guessing which was meant is worse than offering neither, so both entries hide on a multiple
+  selection — the copies still give a line per row. *Go to Task Configuration* also hides on a task
+  whose `TaskDef` could not be read, since configuration is looked up by that name.
 - **The tree refreshes when the panel is shown**, not while you type. A project-wide search on every
   keystroke is not worth the accuracy; the toolbar has a Refresh button for the impatient.
 - **The diagram draws types, not runs.** A `repeat(n)` fan-out is one branch box, because how many

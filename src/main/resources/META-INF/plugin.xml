@@ -17,7 +17,8 @@
         their list leads with the schedule.</p>
         <p>A <b>DTF Tasks</b> tool window lists every task in the project as a tree of project, module and
         task, named by its <code>TaskDef</code> and carrying the same icons as the gutter; double-click or
-        Enter opens the task.</p>
+        Enter opens the task. A right-click offers the same two searches the gutter does - where the task is
+        scheduled and where it is configured - and copies its name or its qualified class name.</p>
         <p><b>Show BPMN Flow</b> draws the whole chain a task takes part in - or every chain in a module -
         as a diagram in its own editor tab: the calling code it starts from, the tasks in order, and a
         parallel gateway where a <code>scheduleJoin(...)</code> brings branches back together.
@@ -75,9 +76,31 @@
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
 
-        <!-- The DTF Tasks tree's own context menu, and the gutter icon's. Installed by id from code,
-             so it is deliberately not added to any group here. -->
+        <!-- The gutter icon's menu. Installed by id from DtfFlowMenuLineMarkerInfo, so it is
+             deliberately not added to any group here. -->
         <group id="Dtf.Flow.PopupMenu">
+            <reference ref="Dtf.ShowFlow"/>
+        </group>
+
+        <!-- The DTF Tasks tree's own menu, installed by id from DtfTaskTreePanel. Separate from the
+             gutter's: everything here acts on a selected row, and a gutter icon has none. EditSource
+             is the platform's - it reads nothing but CommonDataKeys.NAVIGATABLE_ARRAY, which the
+             panel already answers, and it hides itself on a row with no source to open. -->
+        <group id="Dtf.TaskTree.PopupMenu">
+            <reference ref="EditSource"/>
+            <action id="Dtf.GoToTaskConfiguration"
+                    class="com.xmitya.ideadtf.toolwindow.action.GoToTaskConfigurationAction"
+                    icon="AllIcons.General.Settings"/>
+            <action id="Dtf.GoToScheduleCalls"
+                    class="com.xmitya.ideadtf.toolwindow.action.GoToScheduleCallsAction"
+                    icon="com.xmitya.ideadtf.DtfIcons.ScheduleGutter"/>
+            <separator/>
+            <action id="Dtf.CopyTaskName"
+                    class="com.xmitya.ideadtf.toolwindow.action.CopyTaskNameAction"
+                    icon="AllIcons.Actions.Copy"/>
+            <action id="Dtf.CopyTaskClassName"
+                    class="com.xmitya.ideadtf.toolwindow.action.CopyTaskClassNameAction"/>
+            <separator/>
             <reference ref="Dtf.ShowFlow"/>
         </group>
     </actions>

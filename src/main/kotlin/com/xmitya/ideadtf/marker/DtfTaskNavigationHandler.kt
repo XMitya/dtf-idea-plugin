@@ -8,18 +8,14 @@ import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
-import com.intellij.psi.search.GlobalSearchScope
 import com.xmitya.ideadtf.DtfBundle
-import com.xmitya.ideadtf.config.DtfTaskConfigSource
 import com.xmitya.ideadtf.model.CronMark
 import com.xmitya.ideadtf.model.DtfCronModel
 import com.xmitya.ideadtf.model.DtfTaskDefResolver
 import com.xmitya.ideadtf.search.DtfPopupTarget
+import com.xmitya.ideadtf.search.DtfTaskTargets
 import com.xmitya.ideadtf.search.NavigableScheduleSite
 import com.xmitya.ideadtf.search.NavigableTaskConfigSite
-import com.xmitya.ideadtf.search.ScheduleCallSearcher
-import com.xmitya.ideadtf.search.ScheduleSitePresenter
-import com.xmitya.ideadtf.search.TaskConfigSitePresenter
 import java.awt.event.MouseEvent
 
 /**
@@ -70,15 +66,11 @@ class DtfTaskNavigationHandler : GutterIconNavigationHandler<PsiElement> {
      * action.
      */
     private fun search(project: Project, taskClass: PsiClass): Found {
-        val calls = ScheduleSitePresenter(project).present(ScheduleCallSearcher(project).findScheduleSites(taskClass))
+        val calls = DtfTaskTargets.scheduleSites(project, taskClass)
         ProgressManager.checkCanceled()
 
         val taskName = DtfTaskDefResolver.resolveCached(taskClass).taskName
-        val scope = GlobalSearchScope.projectScope(project)
-        val configs = taskName?.let { name ->
-            TaskConfigSitePresenter(project)
-                .present(DtfTaskConfigSource.EP.extensionList.flatMap { it.findSites(project, name, scope) })
-        }.orEmpty()
+        val configs = DtfTaskTargets.configSites(project, taskName)
 
         return Found(calls, configs, taskName ?: taskClass.name.orEmpty(), DtfCronModel.cronMarkOf(taskClass))
     }

@@ -1,6 +1,5 @@
 package com.xmitya.ideadtf.toolwindow
 
-import com.xmitya.ideadtf.DtfBundle
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.TreePath
 
@@ -13,15 +12,14 @@ import javax.swing.tree.TreePath
  * painted. Typing then walks rows that plainly do not match and stops dead on the second character.
  *
  * So this returns what the row shows, minus the parts that are not identifiers: the task count would
- * make "task" match every module, and a cron expression would make digits match at random.
+ * make "task" match every module, and a cron expression would make digits match at random. Only the
+ * task row differs from what the row is simply called - see [DtfTaskRowName].
  */
 internal object DtfTaskTreeSearchText {
 
     fun of(path: TreePath): String? = when (val node = (path.lastPathComponent as? DefaultMutableTreeNode)?.userObject) {
         is DtfTaskEntry -> of(node)
-        is DtfTaskModuleGroup -> node.moduleName ?: DtfBundle.message("dtf.toolwindow.module.none")
-        is DtfTaskSnapshot -> node.projectName
-        else -> null
+        else -> DtfTaskRowName.of(node)
     }
 
     /** Both halves of the row, so a task is findable by its definition or by its class. */

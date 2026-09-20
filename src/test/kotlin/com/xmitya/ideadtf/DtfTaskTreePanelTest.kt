@@ -1,19 +1,26 @@
 package com.xmitya.ideadtf
 
+import com.intellij.ide.CopyProvider
 import com.intellij.ide.DefaultTreeExpander
+import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.openapi.actionSystem.DataContext
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.actionSystem.PlatformDataKeys
 import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.ui.PopupHandler
 import com.intellij.ui.treeStructure.Tree
 import com.xmitya.ideadtf.flow.DtfFlowScope
 import com.xmitya.ideadtf.flow.action.DtfFlowDataKeys
 import com.xmitya.ideadtf.search.DtfTaskSearcher
+import com.xmitya.ideadtf.toolwindow.DtfTaskDataKeys
 import com.xmitya.ideadtf.toolwindow.DtfTaskEntry
 import com.xmitya.ideadtf.toolwindow.DtfTaskModuleGroup
 import com.xmitya.ideadtf.toolwindow.DtfTaskScanService
 import com.xmitya.ideadtf.toolwindow.DtfTaskSnapshot
 import com.xmitya.ideadtf.toolwindow.DtfTaskSnapshotBuilder
 import com.xmitya.ideadtf.toolwindow.DtfTaskTreePanel
+import java.awt.datatransfer.DataFlavor
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.TreePath
 
@@ -204,5 +211,99 @@ class DtfTaskTreePanelTest : DtfFixtureTestCase() {
             ),
             stamp = 1L,
         )
+    }
+
+    /**
+     * The bug as reported: Cmd+C used to put `DtfTaskEntry@55207c29` on the clipboard.
+     *
+     * Nothing here offered a `CopyProvider`, so the platform's Copy stayed disabled and the
+     * keystroke fell through to Swing's tree handler, which copies `toString()` of the user object.
+     */
+    fun testCopyingATaskRowGivesItsTaskNameRatherThanItsToString() {
+        addJavaTask("HelloTask", "HELLO_TASK")
+        val panel = shownPanel()
+        selectRow(panel.preferredFocusComponent as Tree) { it is DtfTaskEntry }
+
+        assertEquals("HELLO_TASK", copiedFrom(panel))
+    }
+
+    /** Declining on the other rows would leave that same hash code on them. */
+    fun testCopyingAModuleRowGivesTheModuleName() {
+        addJavaTask("HelloTask", "HELLO_TASK")
+        val panel = shownPanel()
+        selectRow(panel.preferredFocusComponent as Tree) { it is DtfTaskModuleGroup }
+
+        assertEquals(module.name, copiedFrom(panel))
+    }
+
+    fun testCopyingTheProjectRowGivesTheProjectName() {
+        addJavaTask("HelloTask", "HELLO_TASK")
+        val panel = shownPanel()
+        selectRow(panel.preferredFocusComponent as Tree) { it is DtfTaskSnapshot }
+
+        assertEquals(project.name, copiedFrom(panel))
+    }
+
+    fun testCopyingSeveralRowsGivesALinePerRow() {
+        addJavaTask("HelloTask", "HELLO_TASK")
+        addJavaTask("ByeTask", "BYE_TASK")
+        val panel = shownPanel()
+        val tree = panel.preferredFocusComponent as Tree
+        tree.selectionModel.selectionPaths = pathsOf(tree) { it is DtfTaskEntry }.toTypedArray()
+
+        assertEquals(setOf("HELLO_TASK", "BYE_TASK"), copiedFrom(panel)?.split("\n")?.toSet())
+    }
+
+    /** Offered but declining, so that Copy does not claim a selection it has nothing to say about. */
+    fun testCopyIsOfferedAndDeclinesWithNothingSelected() {
+        addJavaTask("HelloTask", "HELLO_TASK")
+        val panel = shownPanel()
+
+        assertFalse(copyProviderOf(panel).isCopyEnabled(DataContext.EMPTY_CONTEXT))
+    }
+
+    /** A tree not filled in yet: its root stands for nothing, so there is nothing to copy either. */
+    fun testCopyingAnUnfilledTreeCopiesNothing() {
+        val panel = DtfTaskTreePanel(project)
+        val tree = panel.preferredFocusComponent as Tree
+        tree.selectionModel.selectionPath = TreePath(tree.model.root)
+
+        assertNull(copiedFrom(panel))
+    }
+
+    /** The rows are read on the EDT into the snapshot, so the copy itself need not go back there. */
+    fun testTheCopyProviderRunsOffTheEventThread() {
+        assertEquals(ActionUpdateThread.BGT, copyProviderOf(DtfTaskTreePanel(project)).actionUpdateThread)
+    }
+
+    /** What the tree's own menu entries act on. */
+    fun testASelectedTaskRowIsOfferedToTheMenuActions() {
+        addJavaTask("HelloTask", "HELLO_TASK")
+        val panel = shownPanel()
+        selectRow(panel.preferredFocusComponent as Tree) { it is DtfTaskEntry }
+
+        val entries = RecordingDataSink().also { panel.uiDataSnapshot(it) }[DtfTaskDataKeys.TASK_ENTRIES]
+
+        assertEquals(listOf("HELLO_TASK"), entries?.map { it.taskName })
+    }
+
+    /** A module row is not a task, and the entries that act on one must not be offered there. */
+    fun testAModuleRowOffersNoTaskToTheMenuActions() {
+        addJavaTask("HelloTask", "HELLO_TASK")
+        val panel = shownPanel()
+        selectRow(panel.preferredFocusComponent as Tree) { it is DtfTaskModuleGroup }
+
+        assertNull(RecordingDataSink().also { panel.uiDataSnapshot(it) }[DtfTaskDataKeys.TASK_ENTRIES])
+    }
+
+    private fun copyProviderOf(panel: DtfTaskTreePanel): CopyProvider =
+        requireNotNull(RecordingDataSink().also { panel.uiDataSnapshot(it) }[PlatformDataKeys.COPY_PROVIDER])
+
+    /** Null when the provider declines, so that "copied nothing" and "copied a blank" stay apart. */
+    private fun copiedFrom(panel: DtfTaskTreePanel): String? {
+        val provider = copyProviderOf(panel)
+        if (!provider.isCopyEnabled(DataContext.EMPTY_CONTEXT)) return null
+        provider.performCopy(DataContext.EMPTY_CONTEXT)
+        return CopyPasteManager.getInstance().getContents(DataFlavor.stringFlavor)
     }
 }
