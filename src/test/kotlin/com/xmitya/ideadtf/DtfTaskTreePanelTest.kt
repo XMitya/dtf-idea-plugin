@@ -3,13 +3,19 @@ package com.xmitya.ideadtf
 import com.intellij.ide.DefaultTreeExpander
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.application.ReadAction
+import com.intellij.ui.PopupHandler
 import com.intellij.ui.treeStructure.Tree
+import com.xmitya.ideadtf.flow.DtfFlowScope
+import com.xmitya.ideadtf.flow.action.DtfFlowDataKeys
 import com.xmitya.ideadtf.search.DtfTaskSearcher
+import com.xmitya.ideadtf.toolwindow.DtfTaskEntry
 import com.xmitya.ideadtf.toolwindow.DtfTaskModuleGroup
 import com.xmitya.ideadtf.toolwindow.DtfTaskScanService
 import com.xmitya.ideadtf.toolwindow.DtfTaskSnapshot
 import com.xmitya.ideadtf.toolwindow.DtfTaskSnapshotBuilder
 import com.xmitya.ideadtf.toolwindow.DtfTaskTreePanel
+import javax.swing.tree.DefaultMutableTreeNode
+import javax.swing.tree.TreePath
 
 /**
  * That the panel can be built at all.
@@ -85,6 +91,71 @@ class DtfTaskTreePanelTest : DtfFixtureTestCase() {
             }
             """.trimIndent(),
         )
+    }
+
+    /** The tree answers the flow action's question about what is selected. */
+    fun testASelectedTaskRowIsOfferedAsAFlowSubject() {
+        addJavaTask("HelloTask", "HELLO_TASK")
+        val panel = shownPanel()
+        val tree = panel.preferredFocusComponent as Tree
+        selectRow(tree) { it is DtfTaskEntry }
+
+        val sink = RecordingDataSink().also { panel.uiDataSnapshot(it) }
+        val scope = sink[DtfFlowDataKeys.FLOW_SCOPE]
+
+        assertEquals(DtfFlowScope.Task("HelloTask", "HELLO_TASK"), scope)
+    }
+
+    fun testASelectedModuleRowIsOfferedAsAFlowSubject() {
+        addJavaTask("HelloTask", "HELLO_TASK")
+        val panel = shownPanel()
+        val tree = panel.preferredFocusComponent as Tree
+        selectRow(tree) { it is DtfTaskModuleGroup }
+
+        val sink = RecordingDataSink().also { panel.uiDataSnapshot(it) }
+        val scope = sink[DtfFlowDataKeys.FLOW_SCOPE]
+
+        assertEquals(DtfFlowScope.Module(module.name, module.name), scope)
+    }
+
+    /** Two selected rows are two diagrams; guessing which one was meant is worse than offering none. */
+    fun testAMultipleSelectionOffersNoFlowSubject() {
+        addJavaTask("HelloTask", "HELLO_TASK")
+        addJavaTask("ByeTask", "BYE_TASK")
+        val panel = shownPanel()
+        val tree = panel.preferredFocusComponent as Tree
+        tree.selectionModel.selectionPaths = pathsOf(tree) { it is DtfTaskEntry }.toTypedArray()
+
+        val sink = RecordingDataSink().also { panel.uiDataSnapshot(it) }
+
+        assertNull(sink[DtfFlowDataKeys.FLOW_SCOPE])
+    }
+
+    /** Right-click has to offer something; without the handler the tree has no menu at all. */
+    fun testTheTreeHasAContextMenu() {
+        val tree = DtfTaskTreePanel(project).preferredFocusComponent as Tree
+
+        assertTrue(tree.mouseListeners.any { it is PopupHandler })
+    }
+
+    private fun shownPanel(): DtfTaskTreePanel = DtfTaskTreePanel(project).also { it.show(snapshot()) }
+
+    private fun selectRow(tree: Tree, matches: (Any?) -> Boolean) {
+        tree.selectionModel.selectionPath = pathsOf(tree, matches).firstOrNull()
+    }
+
+    /**
+     * Walks the model rather than the view: the panel builds a plain `DefaultTreeModel`, so every
+     * row exists whether or not it has been expanded, and nothing has to be waited for.
+     */
+    private fun pathsOf(tree: Tree, matches: (Any?) -> Boolean): List<TreePath> {
+        val found = mutableListOf<TreePath>()
+        fun walk(node: DefaultMutableTreeNode) {
+            if (matches(node.userObject)) found += TreePath(node.path)
+            for (index in 0 until node.childCount) walk(node.getChildAt(index) as DefaultMutableTreeNode)
+        }
+        walk(tree.model.root as DefaultMutableTreeNode)
+        return found
     }
 
     private fun snapshot(): DtfTaskSnapshot = ReadAction.compute<DtfTaskSnapshot, RuntimeException> {

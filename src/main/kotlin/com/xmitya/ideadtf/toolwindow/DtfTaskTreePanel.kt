@@ -2,6 +2,7 @@ package com.xmitya.ideadtf.toolwindow
 
 import com.intellij.icons.AllIcons
 import com.intellij.ide.CommonActionsManager
+import com.intellij.openapi.actionSystem.ActionGroup
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -13,12 +14,15 @@ import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.pom.Navigatable
+import com.intellij.ui.PopupHandler
 import com.intellij.ui.ScrollPaneFactory
 import com.intellij.ui.TreeSpeedSearch
 import com.intellij.ui.treeStructure.Tree
 import com.intellij.util.EditSourceOnDoubleClickHandler
 import com.intellij.util.EditSourceOnEnterKeyHandler
 import com.xmitya.ideadtf.DtfBundle
+import com.xmitya.ideadtf.flow.DtfFlowScope
+import com.xmitya.ideadtf.flow.action.DtfFlowDataKeys
 import javax.swing.JComponent
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
@@ -58,6 +62,7 @@ class DtfTaskTreePanel(private val project: Project) : SimpleToolWindowPanel(tru
         // user object, Enter reads NAVIGATABLE_ARRAY out of the data context below.
         EditSourceOnDoubleClickHandler.install(tree)
         EditSourceOnEnterKeyHandler.install(tree)
+        installPopupMenu()
 
         toolbar = createToolbar()
         setContent(ScrollPaneFactory.createScrollPane(tree, true))
@@ -71,6 +76,29 @@ class DtfTaskTreePanel(private val project: Project) : SimpleToolWindowPanel(tru
         sink.lazy(CommonDataKeys.NAVIGATABLE_ARRAY) {
             selectedEntries().takeIf { it.isNotEmpty() }?.toTypedArray<Navigatable>()
         }
+        sink.lazy(DtfFlowDataKeys.FLOW_SCOPE) { selectedFlowScope() }
+    }
+
+    /**
+     * The one selected row, as something the flow action can act on.
+     *
+     * A single row only: two selected tasks are two diagrams, and guessing which one was meant is
+     * worse than offering none.
+     */
+    private fun selectedFlowScope(): DtfFlowScope? =
+        when (val node = (tree.selectionPaths?.singleOrNull()?.lastPathComponent as? DefaultMutableTreeNode)?.userObject) {
+            is DtfTaskEntry -> DtfFlowScope.Task(node.qualifiedName, node.displayName)
+            is DtfTaskModuleGroup -> node.moduleName?.let { DtfFlowScope.Module(it, it) }
+            else -> null
+        }
+
+    /**
+     * Right-click selects the row under the cursor first, which the plain popup installer does not
+     * do - without it a right-click on an unselected row acts on whatever was selected before.
+     */
+    private fun installPopupMenu() {
+        val group = ActionManager.getInstance().getAction(POPUP_GROUP_ID) as? ActionGroup ?: return
+        PopupHandler.installFollowingSelectionTreePopup(tree, group, POPUP_PLACE)
     }
 
     /**
@@ -148,5 +176,7 @@ class DtfTaskTreePanel(private val project: Project) : SimpleToolWindowPanel(tru
 
     private companion object {
         const val TOOLBAR_PLACE = "DtfTasksToolWindow"
+        const val POPUP_PLACE = "DtfTasksToolWindowPopup"
+        const val POPUP_GROUP_ID = "Dtf.Flow.PopupMenu"
     }
 }

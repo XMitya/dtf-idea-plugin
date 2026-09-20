@@ -29,7 +29,7 @@ class DtfScheduleCallLineMarkerProvider : LineMarkerProviderDescriptor() {
         if (!DtfTaskModel.isDtfPresent(element.project)) return null
         DtfScheduleMarkers.scheduleCallAt(element) ?: return null
 
-        return LineMarkerInfo(
+        return DtfFlowMenuLineMarkerInfo(
             element,
             element.textRange,
             DtfIcons.ScheduleGutter,

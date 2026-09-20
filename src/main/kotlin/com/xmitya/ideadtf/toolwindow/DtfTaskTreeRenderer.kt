@@ -5,6 +5,8 @@ import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.SimpleTextAttributes
 import com.xmitya.ideadtf.DtfBundle
 import com.xmitya.ideadtf.DtfIcons
+import com.xmitya.ideadtf.model.DtfRowText
+import com.xmitya.ideadtf.model.DtfTextStyle
 import javax.swing.JTree
 import javax.swing.tree.DefaultMutableTreeNode
 
@@ -34,14 +36,14 @@ class DtfTaskTreeRenderer : ColoredTreeCellRenderer() {
 
     private fun renderTask(entry: DtfTaskEntry) {
         icon = if (entry.isCron) DtfIcons.CronGutter else DtfIcons.TaskGutter
-        append(entry.displayName)
-        // Only when it adds something: with no TaskDef to read, the class name is already the label.
-        if (entry.taskName != null && entry.className.isNotEmpty()) {
-            append("  ${entry.className}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+        for (run in DtfRowText.taskRuns(entry.taskName, entry.className, entry.cronExpression)) {
+            append(run.text, attributesOf(run.style))
         }
-        entry.cronExpression?.takeIf { it.isNotBlank() }?.let {
-            append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES)
-        }
+    }
+
+    private fun attributesOf(style: DtfTextStyle): SimpleTextAttributes = when (style) {
+        DtfTextStyle.LEAD -> SimpleTextAttributes.REGULAR_ATTRIBUTES
+        DtfTextStyle.GREY -> SimpleTextAttributes.GRAYED_ATTRIBUTES
     }
 
     private fun renderModule(group: DtfTaskModuleGroup) {

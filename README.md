@@ -50,6 +50,35 @@ expression, so the one that is actually switched off is visible rather than assu
 
 Both searches run on click, under a cancellable progress dialog, never during highlighting.
 
+Those three icons, and the tool window, all answer questions about one task at a time. The one they
+cannot answer is what the *chain* looks like — where a flow starts, what hands work to what, and where
+parallel branches come back together. **Show BPMN Flow** draws it, in an editor tab of its own, the
+way *Diagrams | Show Diagram…* opens a class diagram.
+
+It is offered in four places, and each means something slightly different:
+
+| Where | What it draws |
+| --- | --- |
+| A task row in the **DTF Tasks** tool window | the whole flow that task takes part in, upstream and downstream |
+| A module row there | every flow in that module, side by side |
+| A task class, or a module, in the **Project** view | the same two |
+| A `schedule(...)` call, in the editor or from its gutter icon | the flow that call starts |
+
+The diagram runs left to right. Calling code — the method whose body schedules the first task — is a
+dashed box on the left; a cron task starts from a timer instead, showing its expression. Tasks are
+boxes named the way the tool window names them: the `TaskDef` in bold, the class beside it in grey,
+carrying the same **T** or **clock** icon. `scheduleJoin(...)` draws a BPMN parallel gateway — a
+diamond with a `+` — that the branches converge on before the join task runs.
+
+Double-click opens what a box stands for: a task opens its class, calling code opens the exact
+`schedule()` line, a timer opens the `cron:` line configuring it. Hovering names the thing in full.
+Ctrl/Cmd with the wheel zooms, dragging the background pans, and the toolbar has *Fit Content* for
+when a module turns out larger than expected.
+
+The search runs once, in the background under a cancellable progress, and the tab is rebuilt only
+when *Refresh* is pressed. Asking for the same diagram twice brings the tab you already have to the
+front rather than opening a second one.
+
 Those three icons each answer a question about one task you are already looking at. The **DTF Tasks**
 tool window answers the one they cannot — *which tasks are there at all* — as a tree of project,
 module and task. Each row is named by its `TaskDef` and carries the icon it has in the gutter, with
@@ -103,6 +132,22 @@ site itself.
 | `schedule(taskDef, ctx)` inside the wrapper itself | every task its callers pass in |
 | `schedule(context = ctx, taskDef = DEF)` | Kotlin named arguments, in any order |
 | `sendVkNotificationTask.schedule(dto, key)` | the receiver's own type, no `TaskDef` in sight |
+
+**Joins** — a `scheduleJoin(def, ctx, joinList)` call, which is the only thing in the source that
+states outright that a flow branches. Nothing marks a join task itself: it is an ordinary `Task<T>`
+that happens to read `getInputJoinTaskMessages()`. The branches are whatever produced the `TaskId`s
+in `joinList`, and how far that can be read decides how the gateway is drawn.
+
+| Shape | Read as |
+| --- | --- |
+| `List.of(idA, idB)`, each id a local holding a `schedule(...)` | exactly those two branches |
+| `new ArrayList<>()` plus `add(taskId)` in a loop | the task scheduled in the loop |
+| Anything else in the same method — a stream collected to a list, `schedule(...).apply(list::add)` | every task scheduled in that method |
+| A `List<TaskId>` handed back by a helper | every task scheduled in the class, drawn **dashed** as the guess it is |
+
+`scheduleFork` is *not* a fan-out — its javadoc is "the same as `schedule` but exclude itself from
+join hierarchy of parent task" — so a forked branch is drawn leaving the flow rather than entering
+the gateway.
 
 **Cron tasks** — a task is treated as scheduled when either of these says so, and they are read in
 the order the framework merges them, so configuration wins over the annotation.
@@ -178,6 +223,28 @@ file are searched separately, which is how profiles are usually written.
   modules* group. Modules without tasks are not shown at all.
 - **The tree refreshes when the panel is shown**, not while you type. A project-wide search on every
   keystroke is not worth the accuracy; the toolbar has a Refresh button for the impatient.
+- **The diagram draws types, not runs.** A `repeat(n)` fan-out is one branch box, because how many
+  there will be is decided at runtime. The gateway says what waits for what, not how many.
+- **A join assembled inside a helper is approximated.** When the `joinList` is built several calls
+  deep, the branches are taken to be everything the class schedules; the gateway is drawn dashed and
+  says so on hover, rather than passing a guess off as a reading.
+- **Message types and conditions are not drawn yet.** The model carries both and the layout already
+  reserves the space on each arrow, but nothing writes into it: a task scheduled from inside an `if`
+  is an ordinary arrow for now.
+- **A task's own `schedule(message)` helper is not a loop.** Some project bases give every task one,
+  and its body is `distributedTaskService.schedule(getDef(), ...)` — which reads exactly like a
+  self-reschedule and is the opposite of one. The callers are drawn instead, and both directions of
+  the walk ask the same question so they cannot disagree.
+- **A project scheduler is stepped through, once.** A helper holding the `TaskDef` itself —
+  `workflowScheduler.scheduleCleanup(payload)` — would otherwise break the chain in two, so its
+  callers are searched and a *task* among them becomes the arrow. Called only from a controller or a
+  listener, the helper's own method stays the start of the flow, as one box rather than one per
+  trigger site.
+- **Flows that are not `schedule()` calls are not drawn.** A project framework that *returns* its
+  next step rather than scheduling it, and DTF 2.x's own `registerToRun(...).thenRun(...)` saga DSL,
+  are invisible here for the same reason `@SagaMethod` is.
+- **The walk is capped** at 300 boxes and 12 hops — far above anything observed, real chains being
+  three to six — and the diagram says so when a cap is reached.
 - **Saga steps** (`@SagaMethod`) are a separate mechanism with no `TaskDef` in user code, and are
   not covered.
 

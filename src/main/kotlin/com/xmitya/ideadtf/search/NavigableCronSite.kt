@@ -1,6 +1,5 @@
 package com.xmitya.ideadtf.search
 
-import com.intellij.ide.util.PsiNavigationSupport
 import com.intellij.platform.backend.presentation.TargetPresentation
 import com.intellij.psi.SmartPsiElementPointer
 
@@ -13,12 +12,5 @@ import com.intellij.psi.SmartPsiElementPointer
  *
  * @param active whether the cron there actually schedules anything. A blank one disables it.
  */
-class NavigableCronSite(private val pointer: SmartPsiElementPointer<*>, val presentation: TargetPresentation, val active: Boolean) {
-    fun navigate() {
-        val file = pointer.virtualFile ?: return
-        val offset = pointer.range?.startOffset ?: return
-        PsiNavigationSupport.getInstance()
-            .createNavigatable(pointer.project, file, offset)
-            .navigate(true)
-    }
-}
+class NavigableCronSite(pointer: SmartPsiElementPointer<*>, val presentation: TargetPresentation, val active: Boolean) :
+    PointerNavigatable(pointer)

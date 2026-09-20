@@ -16,6 +16,10 @@
         <p>A <b>DTF Tasks</b> tool window lists every task in the project as a tree of project, module and
         task, named by its <code>TaskDef</code> and carrying the same icons as the gutter; double-click or
         Enter opens the task.</p>
+        <p><b>Show BPMN Flow</b> draws the whole chain a task takes part in - or every chain in a module -
+        as a diagram in its own editor tab: the calling code it starts from, the tasks in order, and a
+        parallel gateway where a <code>scheduleJoin(...)</code> brings branches back together.
+        Double-clicking a box opens what it stands for.</p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
@@ -23,6 +27,8 @@
     <!-- Cron configured in YAML. Optional, so disabling the YAML plugin degrades cron detection to
          the @TaskSchedule annotation instead of preventing this plugin from loading. -->
     <depends optional="true" config-file="dtf-yaml.xml">org.jetbrains.plugins.yaml</depends>
+
+    <resource-bundle>messages.DtfBundle</resource-bundle>
 
     <extensionPoints>
         <!-- One per configuration format. The core asks this list rather than naming an
@@ -51,7 +57,28 @@
                     factoryClass="com.xmitya.ideadtf.toolwindow.DtfTaskToolWindowFactory"/>
         <iconMapper mappingFile="DtfIconMappings.json"/>
         <postStartupActivity implementation="com.xmitya.ideadtf.toolwindow.DtfToolWindowActivity"/>
+
+        <!-- The BPMN flow diagram opens in a tab of its own, on a synthetic file. IDEA Community has
+             no diagram API - that one is Ultimate - so the tab is a plain FileEditor. -->
+        <fileEditorProvider implementation="com.xmitya.ideadtf.flow.editor.DtfFlowEditorProvider"/>
     </extensions>
+
+    <actions>
+        <action id="Dtf.ShowFlow"
+                class="com.xmitya.ideadtf.flow.action.ShowDtfFlowAction"
+                icon="AllIcons.FileTypes.Diagram">
+            <!-- anchor="last" rather than relative to Show Diagram: that action belongs to a plugin
+                 that does not exist in Community, and naming an absent action is logged as an error. -->
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+
+        <!-- The DTF Tasks tree's own context menu, and the gutter icon's. Installed by id from code,
+             so it is deliberately not added to any group here. -->
+        <group id="Dtf.Flow.PopupMenu">
+            <reference ref="Dtf.ShowFlow"/>
+        </group>
+    </actions>
 
     <extensions defaultExtensionNs="com.xmitya.ideadtf">
         <cronConfigSource implementation="com.xmitya.ideadtf.cron.properties.PropertiesCronConfigSource"/>

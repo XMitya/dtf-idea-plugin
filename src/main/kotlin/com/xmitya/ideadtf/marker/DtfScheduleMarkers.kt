@@ -51,7 +51,7 @@ object DtfScheduleMarkers {
         // looks exactly like a wrapper: named for scheduling, TaskDef first.
         if (call.kind != UastCallKind.METHOD_CALL) return null
         if (!isMethodNameOf(call, element)) return null
-        return call.takeIf { identifiesATask(it) }
+        return call.takeIf { launchesATask(it) }
     }
 
     /**
@@ -84,6 +84,9 @@ object DtfScheduleMarkers {
     /**
      * Whether the task launched here can be named from this call site alone.
      *
+     * Public because the flow diagram asks the same question of every call in a task's body: one
+     * predicate, so the gutter and the diagram can never disagree about what a schedule call is.
+     *
      * Two ways in. Either the receiver is itself a task, which is how the bases that expose their
      * own `schedule(message)` work and where no `TaskDef` appears at the call at all; or the call
      * launches a task through one of its arguments and that argument is something we can follow.
@@ -91,8 +94,11 @@ object DtfScheduleMarkers {
      * Which argument is asked of [CallArgumentMatcher.launchParameters] rather than assumed to be
      * the first: the framework pins the definition to position 0, a project wrapper does not.
      */
-    private fun identifiesATask(call: UCallExpression): Boolean {
-        if (CallArgumentMatcher.receiverTask(call) != null) return true
+    fun launchesATask(call: UCallExpression): Boolean {
+        // A receiver that is a task names the task by itself - but only when the call is a scheduling
+        // one. Without that guard any helper called on `this` inside a task, `ids()` or `getDef()`,
+        // reads as `someTask.schedule(message)` and the task appears to schedule itself.
+        if (CallArgumentMatcher.receiverTask(call) != null && isNamedLikeSchedule(call)) return true
         val method = call.resolve() ?: return false
         return CallArgumentMatcher.launchParameters(method).any { index ->
             val argument = call.getArgumentForParameter(index)
@@ -101,6 +107,9 @@ object DtfScheduleMarkers {
             argument != null && nonStructuralChildren(argument).anyMatch { isTaskDefDeclaration(it) }
         }
     }
+
+    private fun isNamedLikeSchedule(call: UCallExpression): Boolean =
+        (call.methodName ?: call.resolve()?.name)?.startsWith(SCHEDULE_PREFIX, ignoreCase = true) == true
 
     private fun isTaskDefDeclaration(argument: UExpression): Boolean {
         if (CallArgumentMatcher.resolvesToGetDef(argument)) return true

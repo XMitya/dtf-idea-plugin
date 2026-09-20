@@ -52,6 +52,16 @@ abstract class DtfFixtureTestCase : LightJavaCodeInsightFixtureTestCase() {
             """.trimIndent(),
         )
         myFixture.addFileToProject(
+            "com/distributed_task_framework/model/FailedExecutionContext.java",
+            """
+            package com.distributed_task_framework.model;
+
+            public class FailedExecutionContext<T> extends ExecutionContext<T> {
+                public boolean isLastAttempt() { return true; }
+            }
+            """.trimIndent(),
+        )
+        myFixture.addFileToProject(
             "com/distributed_task_framework/model/TaskId.java",
             """
             package com.distributed_task_framework.model;
