@@ -9,6 +9,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.DataSink
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.actionSystem.PlatformDataKeys
 import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
@@ -73,28 +74,35 @@ class DtfTaskTreePanel(private val project: Project) : SimpleToolWindowPanel(tru
 
     override fun uiDataSnapshot(sink: DataSink) {
         super.uiDataSnapshot(sink)
-        sink.lazy(CommonDataKeys.NAVIGATABLE_ARRAY) {
-            selectedEntries().takeIf { it.isNotEmpty() }?.toTypedArray<Navigatable>()
-        }
-        sink.lazy(DtfFlowDataKeys.FLOW_SCOPE) { selectedFlowScope() }
+        // Read here rather than in a lazy block. This runs on the EDT, which owns the selection; a
+        // lazy value is computed later and possibly off it. Every key below is a different view of
+        // that one selection, so it is read once, on the thread it belongs to, and handed over.
+        val selection = selectedUserObjects()
+        val tasks = selection.filterIsInstance<DtfTaskEntry>().takeIf { it.isNotEmpty() }
+        sink[PlatformDataKeys.COPY_PROVIDER] = DtfTaskCopyProvider(selection)
+        sink[DtfTaskDataKeys.TASK_ENTRIES] = tasks
+        sink[CommonDataKeys.NAVIGATABLE_ARRAY] = tasks?.toTypedArray<Navigatable>()
+        sink[DtfFlowDataKeys.FLOW_SCOPE] = flowScopeOf(selection.singleOrNull())
     }
 
     /**
-     * The one selected row, as something the flow action can act on.
+     * One selected row, as something the flow action can act on.
      *
      * A single row only: two selected tasks are two diagrams, and guessing which one was meant is
      * worse than offering none.
      */
-    private fun selectedFlowScope(): DtfFlowScope? =
-        when (val node = (tree.selectionPaths?.singleOrNull()?.lastPathComponent as? DefaultMutableTreeNode)?.userObject) {
-            is DtfTaskEntry -> DtfFlowScope.Task(node.qualifiedName, node.displayName)
-            is DtfTaskModuleGroup -> node.moduleName?.let { DtfFlowScope.Module(it, it) }
-            else -> null
-        }
+    private fun flowScopeOf(node: Any?): DtfFlowScope? = when (node) {
+        is DtfTaskEntry -> DtfFlowScope.Task(node.qualifiedName, node.displayName)
+        is DtfTaskModuleGroup -> node.moduleName?.let { DtfFlowScope.Module(it, it) }
+        else -> null
+    }
 
     /**
      * Right-click selects the row under the cursor first, which the plain popup installer does not
      * do - without it a right-click on an unselected row acts on whatever was selected before.
+     *
+     * A menu of its own rather than the gutter icon's: everything here acts on a selected row, and
+     * a gutter icon has none.
      */
     private fun installPopupMenu() {
         val group = ActionManager.getInstance().getAction(POPUP_GROUP_ID) as? ActionGroup ?: return
@@ -144,8 +152,9 @@ class DtfTaskTreePanel(private val project: Project) : SimpleToolWindowPanel(tru
         if (snapshot.modules.size == 1) tree.expandPath(TreePath(arrayOf(root, root.getChildAt(0))))
     }
 
-    private fun selectedEntries(): List<DtfTaskEntry> = tree.selectionPaths.orEmpty().mapNotNull {
-        ((it.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? DtfTaskEntry)
+    /** Every kind of row, because copying works on all of them; the task rows are filtered out above. */
+    private fun selectedUserObjects(): List<Any> = tree.selectionPaths.orEmpty().mapNotNull {
+        (it.lastPathComponent as? DefaultMutableTreeNode)?.userObject
     }
 
     private fun createToolbar(): JComponent {
@@ -177,6 +186,6 @@ class DtfTaskTreePanel(private val project: Project) : SimpleToolWindowPanel(tru
     private companion object {
         const val TOOLBAR_PLACE = "DtfTasksToolWindow"
         const val POPUP_PLACE = "DtfTasksToolWindowPopup"
-        const val POPUP_GROUP_ID = "Dtf.Flow.PopupMenu"
+        const val POPUP_GROUP_ID = "Dtf.TaskTree.PopupMenu"
     }
 }

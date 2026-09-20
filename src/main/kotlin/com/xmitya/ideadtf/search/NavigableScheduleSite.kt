@@ -9,5 +9,6 @@ import com.intellij.psi.SmartPsiElementPointer
  * Holds a smart pointer and an already-rendered presentation rather than live PSI, so that showing
  * the popup and navigating from it never touch PSI on the UI thread.
  */
-class NavigableScheduleSite(pointer: SmartPsiElementPointer<*>, val presentation: TargetPresentation, val tier: ScheduleTier) :
-    PointerNavigatable(pointer)
+class NavigableScheduleSite(pointer: SmartPsiElementPointer<*>, override val presentation: TargetPresentation, val tier: ScheduleTier) :
+    PointerNavigatable(pointer),
+    DtfPopupTarget

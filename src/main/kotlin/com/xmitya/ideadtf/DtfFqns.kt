@@ -32,7 +32,9 @@ object DtfFqns {
 
     /**
      * The Spring property path a task's settings are bound from, as
-     * `distributed-task.task-properties-group.task-properties.<TASK_NAME>.cron`.
+     * `distributed-task.task-properties-group.task-properties.<TASK_NAME>.<setting>`. A `cron` is
+     * one setting among several - `timeout`, `retry`, `max-parallel-in-cluster` - which is why an
+     * ordinary task has a block here too.
      *
      * Segment names go through Spring's relaxed binding, so `distributedTask` reaches the same
      * place; the task name below [CONFIG_TASK_PROPERTIES] does not, because the framework looks it
@@ -41,13 +43,6 @@ object DtfFqns {
     const val CONFIG_PREFIX = "distributed-task"
     const val CONFIG_GROUP = "task-properties-group"
     const val CONFIG_TASK_PROPERTIES = "task-properties"
-
-    /**
-     * Group-wide defaults. Read only so that the sentinel can be indexed; they sit *below*
-     * [TASK_SCHEDULE_ANNOTATION] in the framework's merge order, so a cron here does not make a task
-     * a cron task as far as the gutter is concerned.
-     */
-    const val CONFIG_DEFAULT_PROPERTIES = "default-properties"
 
     const val CONFIG_CRON = "cron"
 

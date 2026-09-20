@@ -2,12 +2,12 @@ package com.xmitya.ideadtf
 
 import com.intellij.openapi.application.ReadAction
 import com.intellij.psi.search.GlobalSearchScope
-import com.xmitya.ideadtf.cron.DtfCronConfigSource
-import com.xmitya.ideadtf.search.CronSitePresenter
-import com.xmitya.ideadtf.search.NavigableCronSite
+import com.xmitya.ideadtf.config.DtfTaskConfigSource
+import com.xmitya.ideadtf.search.NavigableTaskConfigSite
+import com.xmitya.ideadtf.search.TaskConfigSitePresenter
 
 /** What the popup ends up showing for each configuration site. */
-class DtfCronSitePresentationTest : DtfFixtureTestCase() {
+class DtfTaskConfigSitePresentationTest : DtfFixtureTestCase() {
 
     fun testPresentationLeadsWithTheExpressionAndLocation() {
         addYaml("app/src/main/resources/application.yaml", "0 0 1 * * *")
@@ -34,6 +34,25 @@ class DtfCronSitePresentationTest : DtfFixtureTestCase() {
         assertFalse(sites.last().active)
     }
 
+    /** An ordinary task's block has no expression to lead with, so it says what it is instead. */
+    fun testSettingsOnlyEntryIsLabelled() {
+        addSettingsYaml("app/src/main/resources/application.yaml")
+        val site = present().single()
+        assertEquals(DtfBundle.message("dtf.config.settings"), site.presentation.presentableText)
+        assertFalse(site.active)
+    }
+
+    /** For a cron task the two cron rows belong together, above the file that only tunes it. */
+    fun testCronRowsSortAboveSettingsOnlyRows() {
+        addSettingsYaml("app/src/main/resources/application-tuning.yaml")
+        addYaml("app/src/test/resources/application-test.yaml", "")
+        addYaml("app/src/main/resources/application.yaml", "0 0 1 * * *")
+        assertEquals(
+            listOf("0 0 1 * * *", DtfBundle.message("dtf.cron.disabled"), DtfBundle.message("dtf.config.settings")),
+            present().map { it.presentation.presentableText },
+        )
+    }
+
     fun testContainerNamesTheSourceRoot() {
         addYaml("app/src/main/resources/application.yaml", "0 0 1 * * *")
         val container = present().single().presentation.containerText
@@ -54,9 +73,22 @@ class DtfCronSitePresentationTest : DtfFixtureTestCase() {
         )
     }
 
-    private fun present(): List<NavigableCronSite> = ReadAction.compute<List<NavigableCronSite>, RuntimeException> {
+    private fun addSettingsYaml(path: String) {
+        myFixture.addFileToProject(
+            path,
+            """
+            distributed-task:
+              task-properties-group:
+                task-properties:
+                  HELLO_TASK:
+                    max-parallel-in-cluster: 1
+            """.trimIndent(),
+        )
+    }
+
+    private fun present(): List<NavigableTaskConfigSite> = ReadAction.compute<List<NavigableTaskConfigSite>, RuntimeException> {
         val scope = GlobalSearchScope.projectScope(project)
-        val found = DtfCronConfigSource.EP.extensionList.flatMap { it.findSites(project, "HELLO_TASK", scope) }
-        CronSitePresenter(project).present(found)
+        val found = DtfTaskConfigSource.EP.extensionList.flatMap { it.findSites(project, "HELLO_TASK", scope) }
+        TaskConfigSitePresenter(project).present(found)
     }
 }

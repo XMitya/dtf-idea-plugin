@@ -2,7 +2,7 @@ package com.xmitya.ideadtf
 
 import com.intellij.codeInsight.daemon.GutterMark
 import com.intellij.codeInsight.daemon.LineMarkerInfo
-import com.xmitya.ideadtf.marker.CronConfigNavigationHandler
+import com.xmitya.ideadtf.marker.DtfTaskNavigationHandler
 
 /** Which classes get the clock instead of the T. */
 class DtfCronGutterTest : DtfFixtureTestCase() {
@@ -34,6 +34,29 @@ class DtfCronGutterTest : DtfFixtureTestCase() {
     /** A blank cron disables the schedule, so it must not put a clock on anything. */
     fun testBlankCronAloneIsNotACronTask() {
         addApplicationYaml("")
+        myFixture.configureByText("HelloTask.java", plainTask())
+        assertEmpty(cronGutters())
+        assertEquals(1, taskGutters().size)
+    }
+
+    /**
+     * Settings are not a schedule.
+     *
+     * The index now records every `task-properties` entry so that an ordinary task can navigate to
+     * its own, and this is the guard that widening did not leak into the icon - which the tool
+     * window and the BPMN timer read as well.
+     */
+    fun testConfigurationWithoutACronDoesNotPutAClockOnTheTask() {
+        myFixture.addFileToProject(
+            "app/src/main/resources/application.yaml",
+            """
+            distributed-task:
+              task-properties-group:
+                task-properties:
+                  HELLO_TASK:
+                    max-parallel-in-cluster: 1
+            """.trimIndent(),
+        )
         myFixture.configureByText("HelloTask.java", plainTask())
         assertEmpty(cronGutters())
         assertEquals(1, taskGutters().size)
@@ -87,10 +110,10 @@ class DtfCronGutterTest : DtfFixtureTestCase() {
         assertEquals(2, cronGutters().size)
     }
 
-    fun testMarkerIsWiredToTheCronHandler() {
+    fun testMarkerIsWiredToTheTaskHandler() {
         myFixture.configureByText("HelloTask.java", annotatedTask("0 0/10 * ? * *"))
         val marker = cronMarker()
-        assertTrue(marker.navigationHandler is CronConfigNavigationHandler)
+        assertTrue(marker.navigationHandler is DtfTaskNavigationHandler)
     }
 
     fun testTooltipNamesTheCronExpression() {

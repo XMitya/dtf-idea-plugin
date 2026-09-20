@@ -2,8 +2,9 @@ package com.xmitya.ideadtf
 
 import com.intellij.openapi.application.ReadAction
 import com.intellij.psi.search.GlobalSearchScope
-import com.xmitya.ideadtf.cron.CronConfigSite
-import com.xmitya.ideadtf.cron.DtfCronConfigSource
+import com.xmitya.ideadtf.config.CronSummary
+import com.xmitya.ideadtf.config.DtfTaskConfigSource
+import com.xmitya.ideadtf.config.TaskConfigSite
 
 /**
  * The parsing layer, where the long tail of real configuration files lives.
@@ -11,13 +12,13 @@ import com.xmitya.ideadtf.cron.DtfCronConfigSource
  * Goes through the extension point rather than the index class, so that it also covers the wiring:
  * an index registered in an optional descriptor is the one assumption the whole feature rests on.
  */
-class DtfCronYamlIndexTest : DtfFixtureTestCase() {
+class DtfTaskConfigYamlIndexTest : DtfFixtureTestCase() {
 
     /** If the optional descriptor does not load, every other cron test fails for obscure reasons. */
     fun testYamlSourceIsRegistered() {
         assertTrue(
             "no cron config source registered - is the optional YAML descriptor loading?",
-            DtfCronConfigSource.EP.extensionList.isNotEmpty(),
+            DtfTaskConfigSource.EP.extensionList.isNotEmpty(),
         )
     }
 
@@ -32,7 +33,7 @@ class DtfCronYamlIndexTest : DtfFixtureTestCase() {
                     cron: 0 0 1 * * *
             """,
         )
-        assertEquals("0 0 1 * * *", single("HELLO_TASK").expression)
+        assertEquals("0 0 1 * * *", single("HELLO_TASK").cron)
     }
 
     /** The common production shape: the schedule lives in a deploy variable, not in the file. */
@@ -46,7 +47,7 @@ class DtfCronYamlIndexTest : DtfFixtureTestCase() {
                     cron: ${'$'}{PURCHASE_AND_INVOICE_PAID_CRON}
             """,
         )
-        assertEquals("${'$'}{PURCHASE_AND_INVOICE_PAID_CRON}", single("HELLO_TASK").expression)
+        assertEquals("${'$'}{PURCHASE_AND_INVOICE_PAID_CRON}", single("HELLO_TASK").cron)
     }
 
     /** `hasCron()` is `StringUtils.hasText`, so a blank one is how a test profile switches it off. */
@@ -60,11 +61,12 @@ class DtfCronYamlIndexTest : DtfFixtureTestCase() {
                     cron: ''
             """,
         )
-        assertEquals("", single("HELLO_TASK").expression)
+        assertEquals("", single("HELLO_TASK").cron)
         assertFalse(summary("HELLO_TASK")!!.anyNonBlank)
     }
 
-    fun testTaskWithoutCronKeyIsNotConfigured() {
+    /** Settings without a cron: a place to navigate to, but not a reason to call the task scheduled. */
+    fun testTaskWithoutCronKeyIsStillAConfigSite() {
         configure(
             """
             distributed-task:
@@ -74,8 +76,80 @@ class DtfCronYamlIndexTest : DtfFixtureTestCase() {
                     max-parallel-in-cluster: 1
             """,
         )
-        assertEmpty(sites("HELLO_TASK"))
+        assertNull(single("HELLO_TASK").cron)
         assertNull(summary("HELLO_TASK"))
+    }
+
+    /** The three answers the index has to keep apart, in one file. */
+    fun testMissingAndBlankCronAreDifferent() {
+        configure(
+            """
+            distributed-task:
+              task-properties-group:
+                task-properties:
+                  PLAIN_TASK:
+                    timeout: PT1H
+                  DISABLED_TASK:
+                    cron: ''
+                  LIVE_TASK:
+                    cron: 0 0 1 * * *
+            """,
+        )
+        assertNull(single("PLAIN_TASK").cron)
+        assertEquals("", single("DISABLED_TASK").cron)
+        assertEquals("0 0 1 * * *", single("LIVE_TASK").cron)
+        assertNull(summary("PLAIN_TASK"))
+        assertFalse(summary("DISABLED_TASK")!!.anyNonBlank)
+        assertTrue(summary("LIVE_TASK")!!.anyNonBlank)
+    }
+
+    /** One value per key per file, so the document that actually schedules has to win the merge. */
+    fun testMultiDocumentMergePrefersTheRealCron() {
+        configure(
+            """
+            distributed-task:
+              task-properties-group:
+                task-properties:
+                  HELLO_TASK:
+                    timeout: PT1H
+            ---
+            distributed-task:
+              task-properties-group:
+                task-properties:
+                  HELLO_TASK:
+                    cron: 0 0 1 * * *
+            """,
+        )
+        assertEquals("0 0 1 * * *", summary("HELLO_TASK")!!.sampleExpression)
+        assertTrue(summary("HELLO_TASK")!!.anyNonBlank)
+    }
+
+    /** A bare key configures nothing; accepting it would mean accepting scalars and sequences too. */
+    fun testEntryWithNoSettingsMappingIsNotASite() {
+        configure(
+            """
+            distributed-task:
+              task-properties-group:
+                task-properties:
+                  HELLO_TASK:
+            """,
+        )
+        assertEmpty(sites("HELLO_TASK"))
+    }
+
+    /** The click opens the task's block, the same as it does for a cron. */
+    fun testSiteAnchorsOnTheTaskEntryWithoutACron() {
+        configure(
+            """
+            distributed-task:
+              task-properties-group:
+                task-properties:
+                  HELLO_TASK:
+                    max-parallel-in-cluster: 1
+            """,
+        )
+        val site = single("HELLO_TASK")
+        assertEquals("HELLO_TASK:", site.file.text.substring(site.offset, site.offset + 11))
     }
 
     fun testKebabCaseTaskName() {
@@ -88,7 +162,7 @@ class DtfCronYamlIndexTest : DtfFixtureTestCase() {
                     cron: 0 0/10 * ? * *
             """,
         )
-        assertEquals("0 0/10 * ? * *", single("postponed-events-scheduled-check-task-v1").expression)
+        assertEquals("0 0/10 * ? * *", single("postponed-events-scheduled-check-task-v1").cron)
     }
 
     fun testQuotedTaskNameKey() {
@@ -103,8 +177,8 @@ class DtfCronYamlIndexTest : DtfFixtureTestCase() {
                     cron: 0 0 2 * * *
             """,
         )
-        assertEquals("0 0 1 * * *", single("HELLO_TASK").expression)
-        assertEquals("0 0 2 * * *", single("OTHER_TASK").expression)
+        assertEquals("0 0 1 * * *", single("HELLO_TASK").cron)
+        assertEquals("0 0 2 * * *", single("OTHER_TASK").cron)
     }
 
     /** Spring profiles in one file - the case the platform's own helper silently misses. */
@@ -141,7 +215,7 @@ class DtfCronYamlIndexTest : DtfFixtureTestCase() {
                     cron: 0 0 1 * * *
             """,
         )
-        assertEquals("0 0 1 * * *", single("HELLO_TASK").expression)
+        assertEquals("0 0 1 * * *", single("HELLO_TASK").cron)
     }
 
     fun testCompressedDottedPrefixKey() {
@@ -153,7 +227,7 @@ class DtfCronYamlIndexTest : DtfFixtureTestCase() {
                   cron: 0 0 1 * * *
             """,
         )
-        assertEquals("0 0 1 * * *", single("HELLO_TASK").expression)
+        assertEquals("0 0 1 * * *", single("HELLO_TASK").cron)
     }
 
     fun testFlowMappingEntry() {
@@ -165,10 +239,10 @@ class DtfCronYamlIndexTest : DtfFixtureTestCase() {
                   HELLO_TASK: { cron: "0 0 * * * *", max-parallel-in-cluster: 1 }
             """,
         )
-        assertEquals("0 0 * * * *", single("HELLO_TASK").expression)
+        assertEquals("0 0 * * * *", single("HELLO_TASK").cron)
     }
 
-    fun testCommentedOutCronIsNotConfiguration() {
+    fun testCommentedOutCronIsNotACron() {
         configure(
             """
             distributed-task:
@@ -179,7 +253,8 @@ class DtfCronYamlIndexTest : DtfFixtureTestCase() {
             #         cron: 0 0 1 * * *
             """,
         )
-        assertEmpty(sites("HELLO_TASK"))
+        assertNull(single("HELLO_TASK").cron)
+        assertNull(summary("HELLO_TASK"))
     }
 
     /** A repository full of unrelated YAML must cost nothing and find nothing. */
@@ -222,7 +297,10 @@ class DtfCronYamlIndexTest : DtfFixtureTestCase() {
                     max-parallel-in-cluster: 1
             """,
         )
-        assertEmpty(sites("HELLO_TASK"))
+        // The task's own block is still a place to navigate to - what must not happen is the group
+        // cron being read as this task's schedule.
+        assertNull(single("HELLO_TASK").cron)
+        assertNull(summary("HELLO_TASK"))
     }
 
     private fun configure(yaml: String) {
@@ -242,15 +320,15 @@ class DtfCronYamlIndexTest : DtfFixtureTestCase() {
         )
     }
 
-    private fun sites(taskName: String): List<CronConfigSite> = ReadAction.compute<List<CronConfigSite>, RuntimeException> {
-        DtfCronConfigSource.EP.extensionList
+    private fun sites(taskName: String): List<TaskConfigSite> = ReadAction.compute<List<TaskConfigSite>, RuntimeException> {
+        DtfTaskConfigSource.EP.extensionList
             .flatMap { it.findSites(project, taskName, GlobalSearchScope.projectScope(project)) }
     }
 
-    private fun single(taskName: String): CronConfigSite = sites(taskName).single()
+    private fun single(taskName: String): TaskConfigSite = sites(taskName).single()
 
-    private fun summary(taskName: String) = ReadAction.compute<com.xmitya.ideadtf.cron.CronSummary?, RuntimeException> {
-        DtfCronConfigSource.EP.extensionList
+    private fun summary(taskName: String) = ReadAction.compute<CronSummary?, RuntimeException> {
+        DtfTaskConfigSource.EP.extensionList
             .firstNotNullOfOrNull { it.summarise(project, taskName, GlobalSearchScope.projectScope(project)) }
     }
 }

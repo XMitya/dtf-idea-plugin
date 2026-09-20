@@ -1,4 +1,4 @@
-package com.xmitya.ideadtf.cron.yaml
+package com.xmitya.ideadtf.config.yaml
 
 import com.xmitya.ideadtf.DtfFqns
 import org.jetbrains.yaml.psi.YAMLDocument
@@ -13,7 +13,7 @@ import org.jetbrains.yaml.psi.YAMLMapping
  * `---` - which is exactly how Spring profiles are written - besides throwing on a file with no
  * documents at all.
  */
-object YamlCronPath {
+object YamlTaskPropertiesPath {
 
     private val TASK_PROPERTIES_PATH =
         listOf(DtfFqns.CONFIG_PREFIX, DtfFqns.CONFIG_GROUP, DtfFqns.CONFIG_TASK_PROPERTIES)
@@ -32,20 +32,25 @@ object YamlCronPath {
     }
 
     /**
-     * Hands every `<TASK_NAME>:` entry that declares a `cron` to [consumer], with the cron as
-     * written - blank included, since a blank one is a real declaration that happens to disable the
-     * schedule.
+     * Hands every `<TASK_NAME>:` entry to [consumer], with the cron it declares.
+     *
+     * A cron is one setting among several - `timeout`, `retry`, `max-parallel-in-cluster` - so an
+     * entry without one is still a place the task is configured and still worth navigating to. The
+     * three answers are told apart by null versus blank: null is no `cron` key at all, blank is a
+     * key that is there and switched off.
+     *
+     * An entry whose value is not a mapping is skipped: a bare `<TASK_NAME>:` configures nothing,
+     * and accepting it would mean accepting scalars and sequences under `task-properties` too.
      */
-    fun forEachTaskCron(document: YAMLDocument, consumer: (name: String, entry: YAMLKeyValue, expression: String) -> Unit) {
+    fun forEachTaskEntry(document: YAMLDocument, consumer: (name: String, entry: YAMLKeyValue, cron: String?) -> Unit) {
         val mapping = findMapping(document, TASK_PROPERTIES_PATH) ?: return
         for (entry in mapping.keyValues) {
             val name = entry.keyText
             if (name.isEmpty()) continue
             val settings = entry.value as? YAMLMapping ?: continue
             // Presence, not text: getValueText() returns "" both for `cron:` with nothing after it
-            // and for no `cron` key at all, and those mean different things.
-            val cron = findChild(settings, DtfFqns.CONFIG_CRON) ?: continue
-            consumer(name, entry, cron.valueText.trim())
+            // and for no `cron` key at all, and those are now two different answers rather than one.
+            consumer(name, entry, findChild(settings, DtfFqns.CONFIG_CRON)?.valueText?.trim())
         }
     }
 

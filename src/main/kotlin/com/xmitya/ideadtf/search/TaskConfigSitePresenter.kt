@@ -9,34 +9,51 @@ import com.intellij.platform.backend.presentation.TargetPresentation
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.SmartPointerManager
 import com.xmitya.ideadtf.DtfBundle
-import com.xmitya.ideadtf.cron.CronConfigSite
+import com.xmitya.ideadtf.config.TaskConfigSite
 
 /**
- * Renders configuration sites for the popup.
+ * Renders task configuration sites for the popup.
  *
  * Must run inside the read action that produced them: everything PSI-dependent is turned into plain
  * strings here so that nothing is resolved later on the UI thread.
  */
-class CronSitePresenter(private val project: Project) {
+class TaskConfigSitePresenter(private val project: Project) {
 
-    /** Live schedules first: a profile that blanks the cron out is rarely what is being looked for. */
-    fun present(sites: List<CronConfigSite>): List<NavigableCronSite> =
-        sites.sortedWith(compareBy({ it.expression.isEmpty() }, { it.file.virtualFile?.path.orEmpty() }, { it.offset }))
+    /**
+     * Live schedules first: a profile that blanks the cron out is rarely what is being looked for,
+     * and an entry that configures a task without scheduling it is a different question again.
+     *
+     * For an ordinary task every row is settings-only, so the order there comes down to the file.
+     */
+    fun present(sites: List<TaskConfigSite>): List<NavigableTaskConfigSite> =
+        sites.sortedWith(compareBy({ rankOf(it.cron) }, { it.file.virtualFile?.path.orEmpty() }, { it.offset }))
             .map { site ->
-                NavigableCronSite(
+                NavigableTaskConfigSite(
                     pointer = SmartPointerManager.getInstance(project)
                         .createSmartPsiFileRangePointer(site.file, TextRange(site.offset, site.offset)),
                     presentation = presentationFor(site),
-                    active = site.expression.isNotEmpty(),
+                    active = !site.cron.isNullOrEmpty(),
                 )
             }
 
+    private fun rankOf(cron: String?): Int = when {
+        cron == null -> 2
+        cron.isEmpty() -> 1
+        else -> 0
+    }
+
     /**
      * The row leads with the cron itself: that is the question being asked, and it is what differs
-     * between a production file and a test profile that switches the task off.
+     * between a production file and a test profile that switches the task off. An entry that sets
+     * no cron says so instead - it configures the task's timeout or its retries, and the file and
+     * line beside it are what tells two of them apart.
      */
-    private fun presentationFor(site: CronConfigSite): TargetPresentation {
-        val presentable = site.expression.ifEmpty { DtfBundle.message("dtf.cron.disabled") }
+    private fun presentationFor(site: TaskConfigSite): TargetPresentation {
+        val presentable = when {
+            site.cron == null -> DtfBundle.message("dtf.config.settings")
+            site.cron.isEmpty() -> DtfBundle.message("dtf.cron.disabled")
+            else -> site.cron
+        }
         val virtualFile = site.file.virtualFile
 
         var builder = TargetPresentation.builder(presentable)
@@ -59,7 +76,7 @@ class CronSitePresenter(private val project: Project) {
     }
 
     /** `application-local.yaml:37`, the thing you actually scan the list for. */
-    private fun locationOf(site: CronConfigSite): String? {
+    private fun locationOf(site: TaskConfigSite): String? {
         val document = PsiDocumentManager.getInstance(project).getDocument(site.file) ?: return site.file.name
         if (site.offset !in 0..document.textLength) return site.file.name
         return "${site.file.name}:${document.getLineNumber(site.offset) + 1}"

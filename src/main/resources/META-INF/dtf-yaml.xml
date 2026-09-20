@@ -4,9 +4,9 @@
       this file, so the plugin still works - on @TaskSchedule alone - when YAML is disabled.
     -->
     <extensions defaultExtensionNs="com.intellij">
-        <fileBasedIndex implementation="com.xmitya.ideadtf.cron.yaml.DtfCronYamlIndex"/>
+        <fileBasedIndex implementation="com.xmitya.ideadtf.config.yaml.DtfTaskConfigYamlIndex"/>
     </extensions>
     <extensions defaultExtensionNs="com.xmitya.ideadtf">
-        <cronConfigSource implementation="com.xmitya.ideadtf.cron.yaml.YamlCronConfigSource"/>
+        <taskConfigSource implementation="com.xmitya.ideadtf.config.yaml.YamlTaskConfigSource"/>
     </extensions>
 </idea-plugin>

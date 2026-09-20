@@ -15,11 +15,13 @@ import javax.swing.Icon
 /**
  * Puts a marker on every DTF task class and navigates from it to how the task gets launched.
  *
- * Which is two different questions. An ordinary task is launched by a `schedule(...)` call, so the
- * icon lists those; a cron task is launched by the framework, so it gets a clock instead and the
- * icon opens the configuration. One provider rather than two, because a task is exactly one of the
- * two and the marker has to land on the same anchor either way - and because two providers would let
- * a cron task lose its icon entirely if the user switched one of them off.
+ * The click is the same question for every task - where is it scheduled, and where is it configured
+ * - so there is one handler; the icon is what differs. A cron task gets a clock, because the
+ * framework launches it and an empty list of call sites would otherwise read as a dead end.
+ *
+ * One provider rather than two, because the marker has to land on the same anchor either way, and
+ * because two providers would let a cron task lose its icon entirely if the user switched one of
+ * them off.
  *
  * Registered for the `UAST` meta-language, which covers Java and Kotlin from a single provider.
  *
@@ -35,6 +37,9 @@ class DtfTaskLineMarkerProvider : LineMarkerProviderDescriptor() {
 
     override fun getIcon(): Icon = DtfIcons.TaskGutter
 
+    /** Stateless, so one instance rather than one per marker. */
+    private val handler = DtfTaskNavigationHandler()
+
     override fun getLineMarkerInfo(element: PsiElement): LineMarkerInfo<*>? {
         if (!DtfTaskModel.isDtfPresent(element.project)) return null
         val taskClass = DtfTaskMarkers.taskClassAt(element) ?: return null
@@ -45,7 +50,7 @@ class DtfTaskLineMarkerProvider : LineMarkerProviderDescriptor() {
             element.textRange,
             if (cron) DtfIcons.CronGutter else DtfIcons.TaskGutter,
             ::tooltipFor,
-            if (cron) CronConfigNavigationHandler() else ScheduleSitesNavigationHandler(),
+            handler,
             GutterIconRenderer.Alignment.LEFT,
             { DtfBundle.message(if (cron) "dtf.gutter.cron.name" else "dtf.gutter.name") },
         )
