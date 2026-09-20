@@ -1,7 +1,9 @@
 package com.xmitya.ideadtf.toolwindow
 
+import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.DumbService
+import com.intellij.openapi.project.IndexNotReadyException
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
@@ -23,11 +25,27 @@ class DtfTaskToolWindowFactory :
     DumbAware {
 
     /**
-     * Read once, during project open - which is also when indexing is running, hence the dumb guard:
-     * `isDtfPresent` goes through `JavaPsiFacade`, which throws while indexes are being built. A
-     * `false` here is not the last word; the startup activity re-asks.
+     * Read once, during project open, on a background thread that holds no read action of its own -
+     * the platform calls this straight from the tool window initializer's coroutine - hence the
+     * explicit one: `isDtfPresent` goes through `JavaPsiFacade` into the stub index, and touching an
+     * index off a read action fails the platform's threading assertion, which costs the whole tool
+     * window ("Cannot process toolwindow DTF Tasks") rather than just the answer.
+     *
+     * Project open is also when indexing runs, hence the dumb guard; the catch covers the remaining
+     * race, indexing starting after that guard but before the index is read - a read action does not
+     * keep the project smart. A `false` here is not the last word; the startup activity re-asks.
      */
-    override fun shouldBeAvailable(project: Project): Boolean = !DumbService.isDumb(project) && DtfTaskModel.isDtfPresent(project)
+    override fun shouldBeAvailable(project: Project): Boolean = runReadAction {
+        if (DumbService.isDumb(project)) {
+            false
+        } else {
+            try {
+                DtfTaskModel.isDtfPresent(project)
+            } catch (_: IndexNotReadyException) {
+                false
+            }
+        }
+    }
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val panel = DtfTaskTreePanel(project)
