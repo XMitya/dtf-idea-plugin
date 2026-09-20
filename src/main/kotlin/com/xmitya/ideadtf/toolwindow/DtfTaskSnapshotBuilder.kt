@@ -53,8 +53,7 @@ class DtfTaskSnapshotBuilder(private val project: Project) {
      * The declaration to open, which for a Kotlin task is the `KtClass` rather than the light class
      * standing in for it - navigating to the latter lands nowhere.
      */
-    private fun sourceAnchorOf(task: PsiClass): PsiElement =
-        task.navigationElement?.takeIf { it.isValid } ?: task
+    private fun sourceAnchorOf(task: PsiClass): PsiElement = task.navigationElement?.takeIf { it.isValid } ?: task
 
     private fun moduleNameOf(anchor: PsiElement): String? {
         val virtualFile = anchor.containingFile?.virtualFile ?: return null

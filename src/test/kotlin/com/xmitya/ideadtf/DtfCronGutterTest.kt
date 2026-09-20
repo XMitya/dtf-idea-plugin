@@ -179,15 +179,12 @@ class DtfCronGutterTest : DtfFixtureTestCase() {
         )
     }
 
-    private fun cronMarker(): LineMarkerInfo<*> =
-        myFixture.findAllGutters()
-            .filterIsInstance<LineMarkerInfo.LineMarkerGutterIconRenderer<*>>()
-            .single { it.icon === DtfIcons.CronGutter }
-            .lineMarkerInfo
+    private fun cronMarker(): LineMarkerInfo<*> = myFixture.findAllGutters()
+        .filterIsInstance<LineMarkerInfo.LineMarkerGutterIconRenderer<*>>()
+        .single { it.icon === DtfIcons.CronGutter }
+        .lineMarkerInfo
 
-    private fun cronGutters(): List<GutterMark> =
-        myFixture.findAllGutters().filter { it.icon === DtfIcons.CronGutter }
+    private fun cronGutters(): List<GutterMark> = myFixture.findAllGutters().filter { it.icon === DtfIcons.CronGutter }
 
-    private fun taskGutters(): List<GutterMark> =
-        myFixture.findAllGutters().filter { it.icon === DtfIcons.TaskGutter }
+    private fun taskGutters(): List<GutterMark> = myFixture.findAllGutters().filter { it.icon === DtfIcons.TaskGutter }
 }

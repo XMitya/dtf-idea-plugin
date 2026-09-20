@@ -18,15 +18,16 @@ import com.xmitya.ideadtf.model.DtfTaskModel
  * initial state of the stripe button and leaves the window registered, so [DtfToolWindowAvailability]
  * can flip it once indexing finishes or a dependency appears.
  */
-class DtfTaskToolWindowFactory : ToolWindowFactory, DumbAware {
+class DtfTaskToolWindowFactory :
+    ToolWindowFactory,
+    DumbAware {
 
     /**
      * Read once, during project open - which is also when indexing is running, hence the dumb guard:
      * `isDtfPresent` goes through `JavaPsiFacade`, which throws while indexes are being built. A
      * `false` here is not the last word; the startup activity re-asks.
      */
-    override fun shouldBeAvailable(project: Project): Boolean =
-        !DumbService.isDumb(project) && DtfTaskModel.isDtfPresent(project)
+    override fun shouldBeAvailable(project: Project): Boolean = !DumbService.isDumb(project) && DtfTaskModel.isDtfPresent(project)
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val panel = DtfTaskTreePanel(project)

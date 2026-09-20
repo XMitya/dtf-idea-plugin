@@ -665,16 +665,15 @@ class ScheduledTaskSearcherTest : DtfFixtureTestCase() {
     }
 
     /** Every schedule call in the file, each with the tasks it resolves to and its own text. */
-    private fun allCalls(): List<Pair<List<String>, String>> =
-        ReadAction.compute<List<Pair<List<String>, String>>, RuntimeException> {
-            val searcher = ScheduledTaskSearcher(project)
-            leavesOf(myFixture.file)
-                .mapNotNull { DtfScheduleMarkers.scheduleCallAt(it) }
-                .map { call ->
-                    val tasks = searcher.findTasks(call).map { it.qualifiedName ?: it.name.orEmpty() }
-                    tasks to (call.sourcePsi?.text.orEmpty())
-                }
-        }
+    private fun allCalls(): List<Pair<List<String>, String>> = ReadAction.compute<List<Pair<List<String>, String>>, RuntimeException> {
+        val searcher = ScheduledTaskSearcher(project)
+        leavesOf(myFixture.file)
+            .mapNotNull { DtfScheduleMarkers.scheduleCallAt(it) }
+            .map { call ->
+                val tasks = searcher.findTasks(call).map { it.qualifiedName ?: it.name.orEmpty() }
+                tasks to (call.sourcePsi?.text.orEmpty())
+            }
+    }
 
     private fun leavesOf(root: PsiElement): List<PsiElement> {
         val leaves = mutableListOf<PsiElement>()

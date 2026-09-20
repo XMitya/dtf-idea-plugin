@@ -51,10 +51,6 @@ class DtfTaskModuleGroup(val moduleName: String?, val tasks: List<DtfTaskEntry>)
  * [stamp] is what the scan saw, so that showing the panel again can tell "nothing has changed" from
  * "re-scan" without doing the work to find out.
  */
-class DtfTaskSnapshot(
-    val projectName: String,
-    val modules: List<DtfTaskModuleGroup>,
-    val stamp: Long,
-) {
+class DtfTaskSnapshot(val projectName: String, val modules: List<DtfTaskModuleGroup>, val stamp: Long) {
     val taskCount: Int get() = modules.sumOf { it.tasks.size }
 }

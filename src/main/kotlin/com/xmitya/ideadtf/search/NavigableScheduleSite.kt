@@ -10,11 +10,7 @@ import com.intellij.psi.SmartPsiElementPointer
  * Holds a smart pointer and an already-rendered presentation rather than live PSI, so that showing
  * the popup and navigating from it never touch PSI on the UI thread.
  */
-class NavigableScheduleSite(
-    private val pointer: SmartPsiElementPointer<*>,
-    val presentation: TargetPresentation,
-    val tier: ScheduleTier,
-) {
+class NavigableScheduleSite(private val pointer: SmartPsiElementPointer<*>, val presentation: TargetPresentation, val tier: ScheduleTier) {
     fun navigate() {
         val file = pointer.virtualFile ?: return
         val offset = pointer.range?.startOffset ?: return

@@ -48,14 +48,13 @@ object DtfCronModel {
      * Depends on the VFS as well as on PSI: configuration usually changes by switching a branch
      * rather than by typing, and that moves no PSI modification count.
      */
-    fun cronMarkOf(psiClass: PsiClass): CronMark =
-        CachedValuesManager.getCachedValue(psiClass, CRON_MARK) {
-            CachedValueProvider.Result.create(
-                compute(psiClass),
-                PsiModificationTracker.MODIFICATION_COUNT,
-                VirtualFileManager.VFS_STRUCTURE_MODIFICATIONS,
-            )
-        }
+    fun cronMarkOf(psiClass: PsiClass): CronMark = CachedValuesManager.getCachedValue(psiClass, CRON_MARK) {
+        CachedValueProvider.Result.create(
+            compute(psiClass),
+            PsiModificationTracker.MODIFICATION_COUNT,
+            VirtualFileManager.VFS_STRUCTURE_MODIFICATIONS,
+        )
+    }
 
     private fun compute(psiClass: PsiClass): CronMark {
         val annotation = taskScheduleAnnotation(psiClass)

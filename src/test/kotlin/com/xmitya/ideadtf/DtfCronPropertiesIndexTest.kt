@@ -59,11 +59,10 @@ class DtfCronPropertiesIndexTest : DtfFixtureTestCase() {
         myFixture.addFileToProject("app/src/main/resources/application.properties", text)
     }
 
-    private fun sites(taskName: String): List<CronConfigSite> =
-        ReadAction.compute<List<CronConfigSite>, RuntimeException> {
-            DtfCronConfigSource.EP.extensionList
-                .flatMap { it.findSites(project, taskName, GlobalSearchScope.projectScope(project)) }
-        }
+    private fun sites(taskName: String): List<CronConfigSite> = ReadAction.compute<List<CronConfigSite>, RuntimeException> {
+        DtfCronConfigSource.EP.extensionList
+            .flatMap { it.findSites(project, taskName, GlobalSearchScope.projectScope(project)) }
+    }
 
     private fun single(taskName: String): CronConfigSite = sites(taskName).single()
 

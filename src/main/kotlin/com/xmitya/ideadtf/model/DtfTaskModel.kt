@@ -28,21 +28,20 @@ object DtfTaskModel {
      * Depends on [PsiModificationTracker.MODIFICATION_COUNT] as well as the roots, so that adding a
      * source-level `Task` interface also invalidates the answer.
      */
-    fun isDtfPresent(project: Project): Boolean =
-        CachedValuesManager.getManager(project).getCachedValue(
-            project,
-            DTF_PRESENT,
-            {
-                val scope = GlobalSearchScope.allScope(project)
-                val found = JavaPsiFacade.getInstance(project).findClass(DtfFqns.TASK, scope) != null
-                CachedValueProvider.Result.create(
-                    found,
-                    ProjectRootModificationTracker.getInstance(project),
-                    PsiModificationTracker.MODIFICATION_COUNT,
-                )
-            },
-            false,
-        )
+    fun isDtfPresent(project: Project): Boolean = CachedValuesManager.getManager(project).getCachedValue(
+        project,
+        DTF_PRESENT,
+        {
+            val scope = GlobalSearchScope.allScope(project)
+            val found = JavaPsiFacade.getInstance(project).findClass(DtfFqns.TASK, scope) != null
+            CachedValueProvider.Result.create(
+                found,
+                ProjectRootModificationTracker.getInstance(project),
+                PsiModificationTracker.MODIFICATION_COUNT,
+            )
+        },
+        false,
+    )
 
     /**
      * Whether [psiClass] is a class the plugin should mark as a task: a concrete class somewhere
@@ -59,8 +58,7 @@ object DtfTaskModel {
     }
 
     /** Supertype-closure test, memoized per class. Kotlin light classes make this non-trivial. */
-    fun isDtfTask(psiClass: PsiClass): Boolean =
-        CachedValuesManager.getProjectPsiDependentCache(psiClass) {
-            InheritanceUtil.isInheritor(it, DtfFqns.TASK)
-        }
+    fun isDtfTask(psiClass: PsiClass): Boolean = CachedValuesManager.getProjectPsiDependentCache(psiClass) {
+        InheritanceUtil.isInheritor(it, DtfFqns.TASK)
+    }
 }

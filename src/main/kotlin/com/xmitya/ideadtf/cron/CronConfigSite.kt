@@ -14,8 +14,4 @@ import com.intellij.psi.PsiFile
  *   blank, which the framework reads as "not scheduled" - `TaskSettings.hasCron()` is
  *   `StringUtils.hasText`.
  */
-data class CronConfigSite(
-    val file: PsiFile,
-    val offset: Int,
-    val expression: String,
-)
+data class CronConfigSite(val file: PsiFile, val offset: Int, val expression: String)

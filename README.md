@@ -178,14 +178,28 @@ file are searched separately, which is how profiles are usually written.
 Requires JDK 21.
 
 ```sh
+./gradlew check           # ktlint, the fixture tests and the coverage gate
 ./gradlew buildPlugin     # -> build/distributions/idea-dtf-plugin-<version>.zip
-./gradlew test            # fixture tests
+./gradlew test            # fixture tests alone
 ./gradlew verifyPlugin    # IntelliJ Plugin Verifier
 ./gradlew runIde          # sandbox IDE with the plugin installed
 
 # custom-repository manifest, pointing at the directory that serves the zip
 ./gradlew generateUpdatePluginsXml -PpluginBaseUrl=https://host/path
 ```
+
+### Style and coverage
+
+`ktlintFormat` fixes what `ktlintCheck` reports. The layout comes from `.editorconfig`, which picks
+ktlint's `intellij_idea` code style - the one the IDE this plugin is written in already applies, so
+the linter stays a gate rather than a reformatting campaign.
+
+`koverHtmlReport` writes `build/reports/kover/html`. `koverVerify` requires 90% line coverage over
+the whole plugin, nothing excluded; the suite currently sits at about 96%. Lines rather than
+branches, because most branches here are Kotlin's null checks on platform API that is nullable in
+principle and never null in a fixture.
+
+Both run as part of `check`, which is what CI calls.
 
 `pluginVersion` from `gradle.properties` names the build; `-PpluginVersion=<v>` overrides it, which
 is how the release workflow keeps the zip in step with the tag.
@@ -206,8 +220,8 @@ placed in `~/.m2/repository` by hand.
 
 ## Releasing
 
-`.github/workflows/build.yml` tests, builds and verifies every push to `main` and every pull
-request.
+`.github/workflows/build.yml` checks - style, tests, coverage - then builds and verifies every push
+to `main` and every pull request.
 
 A release is cut by pushing a tag. The tag carries the version, so what the release page shows and
 what is inside the zip cannot disagree:

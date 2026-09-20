@@ -372,6 +372,5 @@ class DtfScheduleGutterTest : DtfFixtureTestCase() {
         )
     }
 
-    private fun scheduleGutters(): List<GutterMark> =
-        myFixture.findAllGutters().filter { it.icon === DtfIcons.ScheduleGutter }
+    private fun scheduleGutters(): List<GutterMark> = myFixture.findAllGutters().filter { it.icon === DtfIcons.ScheduleGutter }
 }

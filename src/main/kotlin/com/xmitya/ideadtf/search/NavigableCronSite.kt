@@ -13,11 +13,7 @@ import com.intellij.psi.SmartPsiElementPointer
  *
  * @param active whether the cron there actually schedules anything. A blank one disables it.
  */
-class NavigableCronSite(
-    private val pointer: SmartPsiElementPointer<*>,
-    val presentation: TargetPresentation,
-    val active: Boolean,
-) {
+class NavigableCronSite(private val pointer: SmartPsiElementPointer<*>, val presentation: TargetPresentation, val active: Boolean) {
     fun navigate() {
         val file = pointer.virtualFile ?: return
         val offset = pointer.range?.startOffset ?: return

@@ -124,8 +124,7 @@ abstract class DtfFixtureTestCase : LightJavaCodeInsightFixtureTestCase() {
     }
 
     /** The class under test, by short or qualified name. */
-    protected fun findClass(name: String): PsiClass =
-        requireNotNull(
-            JavaPsiFacade.getInstance(project).findClass(name, GlobalSearchScope.allScope(project))
-        ) { "class $name not found" }
+    protected fun findClass(name: String): PsiClass = requireNotNull(
+        JavaPsiFacade.getInstance(project).findClass(name, GlobalSearchScope.allScope(project)),
+    ) { "class $name not found" }
 }

@@ -17,19 +17,17 @@ import javax.swing.tree.TreePath
  */
 internal object DtfTaskTreeSearchText {
 
-    fun of(path: TreePath): String? =
-        when (val node = (path.lastPathComponent as? DefaultMutableTreeNode)?.userObject) {
-            is DtfTaskEntry -> of(node)
-            is DtfTaskModuleGroup -> node.moduleName ?: DtfBundle.message("dtf.toolwindow.module.none")
-            is DtfTaskSnapshot -> node.projectName
-            else -> null
-        }
+    fun of(path: TreePath): String? = when (val node = (path.lastPathComponent as? DefaultMutableTreeNode)?.userObject) {
+        is DtfTaskEntry -> of(node)
+        is DtfTaskModuleGroup -> node.moduleName ?: DtfBundle.message("dtf.toolwindow.module.none")
+        is DtfTaskSnapshot -> node.projectName
+        else -> null
+    }
 
     /** Both halves of the row, so a task is findable by its definition or by its class. */
-    private fun of(entry: DtfTaskEntry): String =
-        if (entry.taskName == null || entry.className.isEmpty()) {
-            entry.displayName
-        } else {
-            "${entry.taskName} ${entry.className}"
-        }
+    private fun of(entry: DtfTaskEntry): String = if (entry.taskName == null || entry.className.isEmpty()) {
+        entry.displayName
+    } else {
+        "${entry.taskName} ${entry.className}"
+    }
 }

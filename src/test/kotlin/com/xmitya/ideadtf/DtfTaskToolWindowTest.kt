@@ -1,8 +1,12 @@
 package com.xmitya.ideadtf
 
 import com.intellij.ide.ui.IconMapperBean
+import com.intellij.openapi.wm.ToolWindowAnchor
 import com.intellij.openapi.wm.ToolWindowEP
+import com.intellij.openapi.wm.ToolWindowManager
+import com.intellij.ui.treeStructure.Tree
 import com.xmitya.ideadtf.toolwindow.DtfTaskToolWindowFactory
+import com.xmitya.ideadtf.toolwindow.DtfTaskTreePanel
 
 /**
  * The descriptor wiring, which nothing else would catch.
@@ -36,6 +40,27 @@ class DtfTaskToolWindowTest : DtfFixtureTestCase() {
 
     fun testStripeButtonIsAvailableWhenDtfIsOnTheClasspath() {
         assertTrue(DtfTaskToolWindowFactory().shouldBeAvailable(project))
+    }
+
+    /**
+     * Opening the tool window: one content, focusing the tree, and a scan started on sight.
+     *
+     * The window is built on first open, so a mistake in here - content added to the wrong manager,
+     * a listener on a disposable that is already gone - surfaces only when someone clicks the stripe
+     * button, and never in a test that drives the panel directly.
+     */
+    fun testOpeningTheToolWindowShowsTheTreeAndStartsAScan() {
+        val toolWindow = ToolWindowManager.getInstance(project).registerToolWindow(DtfTaskToolWindowFactory.ID) {
+            anchor = ToolWindowAnchor.LEFT
+        }
+
+        DtfTaskToolWindowFactory().createToolWindowContent(project, toolWindow)
+
+        val content = toolWindow.contentManager.contents.single()
+        assertTrue(content.component is DtfTaskTreePanel)
+        assertSame((content.component as DtfTaskTreePanel).preferredFocusComponent, content.preferredFocusableComponent)
+        // `refreshIfStale` on an untouched panel always scans, and a started scan says so.
+        assertEquals(DtfBundle.message("dtf.toolwindow.progress"), (content.component as DtfTaskTreePanel).emptyText())
     }
 
     /**
@@ -84,6 +109,8 @@ class DtfTaskToolWindowTest : DtfFixtureTestCase() {
         val json = javaClass.getResourceAsStream("/$MAPPING_FILE")!!.reader().readText()
         assertTrue(json.contains("\"dtfToolWindow.svg\": \"icons/dtfToolWindow.svg\""))
     }
+
+    private fun DtfTaskTreePanel.emptyText() = (preferredFocusComponent as Tree).emptyText.text
 
     private companion object {
         const val MAPPING_FILE = "DtfIconMappings.json"

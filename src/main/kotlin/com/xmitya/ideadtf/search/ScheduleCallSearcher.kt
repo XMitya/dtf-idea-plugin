@@ -7,9 +7,9 @@ import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiModifier
-import com.intellij.psi.util.InheritanceUtil
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.MethodReferencesSearch
+import com.intellij.psi.util.InheritanceUtil
 import com.xmitya.ideadtf.DtfFqns
 import com.xmitya.ideadtf.model.DtfTaskDefResolver
 import org.jetbrains.uast.UCallExpression
@@ -125,10 +125,7 @@ class ScheduleCallSearcher(private val project: Project) {
      * references. That is both cheaper and more precise: a global search would have to be filtered
      * anyway, because `task.def` on some *other* task must not be attributed here.
      */
-    private fun collectSelfSchedules(
-        taskClass: PsiClass,
-        found: MutableMap<Pair<String, Int>, ScheduleCallSite>,
-    ) {
+    private fun collectSelfSchedules(taskClass: PsiClass, found: MutableMap<Pair<String, Int>, ScheduleCallSite>) {
         for (owner in supertypeClosure(taskClass)) {
             val uClass = asSourceUClass(owner) ?: continue
             uClass.accept(object : AbstractUastVisitor() {
@@ -200,11 +197,7 @@ class ScheduleCallSearcher(private val project: Project) {
         return source.toUElementOfType<UClass>() ?: psiClass.toUElementOfType<UClass>()
     }
 
-    private fun addSite(
-        call: UCallExpression,
-        tier: ScheduleTier,
-        found: MutableMap<Pair<String, Int>, ScheduleCallSite>,
-    ) {
+    private fun addSite(call: UCallExpression, tier: ScheduleTier, found: MutableMap<Pair<String, Int>, ScheduleCallSite>) {
         val psi = call.sourcePsi ?: return
         val site = ScheduleCallSite(psi, tier)
         found.putIfAbsent(site.key, site)

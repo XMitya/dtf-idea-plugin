@@ -87,10 +87,9 @@ class DtfTaskTreePanelTest : DtfFixtureTestCase() {
         )
     }
 
-    private fun snapshot(): DtfTaskSnapshot =
-        ReadAction.compute<DtfTaskSnapshot, RuntimeException> {
-            DtfTaskSnapshotBuilder(project).build(DtfTaskSearcher(project).findAllTasks(), stamp = 1L)
-        }
+    private fun snapshot(): DtfTaskSnapshot = ReadAction.compute<DtfTaskSnapshot, RuntimeException> {
+        DtfTaskSnapshotBuilder(project).build(DtfTaskSearcher(project).findAllTasks(), stamp = 1L)
+    }
 
     /** The toolbar the Project view taught people to expect. */
     fun testToolbarOffersRefreshExpandAndCollapse() {

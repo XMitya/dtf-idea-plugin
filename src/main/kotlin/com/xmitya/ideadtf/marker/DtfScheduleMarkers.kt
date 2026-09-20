@@ -106,12 +106,16 @@ object DtfScheduleMarkers {
         if (CallArgumentMatcher.resolvesToGetDef(argument)) return true
         return when (val resolved = (argument as? UReferenceExpression)?.resolve()) {
             is PsiParameter -> false
+
             // Covers a Java constant and a Kotlin local alike; Kotlin locals resolve to a synthetic
             // variable, which is still a PsiVariable with the declared type.
             is PsiVariable -> InheritanceUtil.isInheritor(resolved.type, DtfFqns.TASK_DEF)
+
             // Reading a Kotlin `val` resolves to its generated accessor rather than to a field.
-            is PsiMethod -> resolved.parameterList.isEmpty &&
-                resolved.returnType?.let { InheritanceUtil.isInheritor(it, DtfFqns.TASK_DEF) } == true
+            is PsiMethod ->
+                resolved.parameterList.isEmpty &&
+                    resolved.returnType?.let { InheritanceUtil.isInheritor(it, DtfFqns.TASK_DEF) } == true
+
             else -> false
         }
     }

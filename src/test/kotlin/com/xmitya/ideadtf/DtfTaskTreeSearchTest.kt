@@ -118,14 +118,12 @@ class DtfTaskTreeSearchTest : DtfFixtureTestCase() {
             .apply { isAccessible = true }
             .invoke(supply, path) as String?
 
-    private fun allPaths(supply: SpeedSearchBase<*>): List<*> =
-        com.intellij.ui.TreeSpeedSearch::class.java.getDeclaredMethod("allPaths")
-            .apply { isAccessible = true }
-            .invoke(supply)
-            .let { (it as com.intellij.util.containers.JBIterable<*>).toList() }
+    private fun allPaths(supply: SpeedSearchBase<*>): List<*> = com.intellij.ui.TreeSpeedSearch::class.java.getDeclaredMethod("allPaths")
+        .apply { isAccessible = true }
+        .invoke(supply)
+        .let { (it as com.intellij.util.containers.JBIterable<*>).toList() }
 
-    private fun searchTextOf(userObject: Any): String? =
-        DtfTaskTreeSearchText.of(TreePath(DefaultMutableTreeNode(userObject)))
+    private fun searchTextOf(userObject: Any): String? = DtfTaskTreeSearchText.of(TreePath(DefaultMutableTreeNode(userObject)))
 
     private fun firstTaskAfterAdding(className: String, taskName: String): Any {
         addJavaTask(className, taskName)
@@ -147,8 +145,7 @@ class DtfTaskTreeSearchTest : DtfFixtureTestCase() {
         )
     }
 
-    private fun snapshot(): DtfTaskSnapshot =
-        ReadAction.compute<DtfTaskSnapshot, RuntimeException> {
-            DtfTaskSnapshotBuilder(project).build(DtfTaskSearcher(project).findAllTasks(), stamp = 1L)
-        }
+    private fun snapshot(): DtfTaskSnapshot = ReadAction.compute<DtfTaskSnapshot, RuntimeException> {
+        DtfTaskSnapshotBuilder(project).build(DtfTaskSearcher(project).findAllTasks(), stamp = 1L)
+    }
 }

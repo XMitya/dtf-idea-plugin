@@ -47,8 +47,9 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Test
-        run: ./gradlew test --stacktrace
+      # Same gate as the Build workflow: style, tests and coverage before anything is published.
+      - name: Check
+        run: ./gradlew check --stacktrace
 
       - name: Build plugin
         run: ./gradlew buildPlugin -PpluginVersion=${{ steps.version.outputs.version }} --stacktrace
