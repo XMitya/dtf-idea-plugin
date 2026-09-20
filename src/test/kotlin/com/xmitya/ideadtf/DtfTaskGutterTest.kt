@@ -2,6 +2,7 @@ package com.xmitya.ideadtf
 
 import com.intellij.codeInsight.daemon.GutterMark
 import com.intellij.codeInsight.daemon.LineMarkerInfo
+import com.xmitya.ideadtf.marker.DtfTaskNavigationHandler
 
 /** The icon side of the feature: which classes get marked as DTF tasks. */
 class DtfTaskGutterTest : DtfFixtureTestCase() {
@@ -153,7 +154,8 @@ class DtfTaskGutterTest : DtfFixtureTestCase() {
             .filterIsInstance<LineMarkerInfo.LineMarkerGutterIconRenderer<*>>()
             .single { it.icon === DtfIcons.TaskGutter }
             .lineMarkerInfo
-        assertNotNull(marker.navigationHandler)
+        // The same handler the clock uses: one click answers both questions.
+        assertTrue(marker.navigationHandler is DtfTaskNavigationHandler)
         assertEquals(
             DtfBundle.message("dtf.gutter.tooltip.named", "HELLO_TASK"),
             marker.lineMarkerTooltip,

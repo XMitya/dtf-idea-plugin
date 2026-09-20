@@ -7,12 +7,12 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiRecursiveElementWalkingVisitor
 import com.intellij.psi.search.GlobalSearchScope
-import com.xmitya.ideadtf.cron.DtfCronConfigSource
+import com.xmitya.ideadtf.config.DtfTaskConfigSource
 import com.xmitya.ideadtf.marker.DtfScheduleMarkers
-import com.xmitya.ideadtf.search.CronSitePresenter
 import com.xmitya.ideadtf.search.ScheduleCallSearcher
 import com.xmitya.ideadtf.search.ScheduleSitePresenter
 import com.xmitya.ideadtf.search.ScheduledTaskSearcher
+import com.xmitya.ideadtf.search.TaskConfigSitePresenter
 import com.xmitya.ideadtf.search.TaskTargetPresenter
 
 /**
@@ -68,14 +68,38 @@ class DtfPopupNavigationTest : DtfFixtureTestCase() {
 
         val site = ReadAction.compute<_, RuntimeException> {
             val scope = GlobalSearchScope.projectScope(project)
-            val found = DtfCronConfigSource.EP.extensionList.flatMap { it.findSites(project, "HELLO_TASK", scope) }
-            CronSitePresenter(project).present(found)
+            val found = DtfTaskConfigSource.EP.extensionList.flatMap { it.findSites(project, "HELLO_TASK", scope) }
+            TaskConfigSitePresenter(project).present(found)
         }.single()
         site.navigate(true)
 
         assertEquals(yaml.virtualFile, openedFile())
         // The site anchors on the task's entry rather than the `cron` line under it, so that a
         // mapping holding several settings opens on the task rather than mid-block.
+        assertEquals("HELLO_TASK:", textAtCaret(11))
+    }
+
+    /** The same anchor when there is no cron at all - the block, not the first setting in it. */
+    fun testSettingsOnlySiteOpensTheTaskEntry() {
+        val yaml = myFixture.addFileToProject(
+            "app/src/main/resources/application.yaml",
+            """
+            distributed-task:
+              task-properties-group:
+                task-properties:
+                  HELLO_TASK:
+                    max-parallel-in-cluster: 1
+            """.trimIndent(),
+        )
+
+        val site = ReadAction.compute<_, RuntimeException> {
+            val scope = GlobalSearchScope.projectScope(project)
+            val found = DtfTaskConfigSource.EP.extensionList.flatMap { it.findSites(project, "HELLO_TASK", scope) }
+            TaskConfigSitePresenter(project).present(found)
+        }.single()
+        site.navigate(true)
+
+        assertEquals(yaml.virtualFile, openedFile())
         assertEquals("HELLO_TASK:", textAtCaret(11))
     }
 

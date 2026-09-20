@@ -16,7 +16,7 @@ import com.intellij.psi.search.searches.ClassInheritorsSearch
 import com.intellij.psi.search.searches.MethodReferencesSearch
 import com.intellij.psi.util.InheritanceUtil
 import com.xmitya.ideadtf.DtfFqns
-import com.xmitya.ideadtf.cron.DtfCronConfigSource
+import com.xmitya.ideadtf.config.DtfTaskConfigSource
 import com.xmitya.ideadtf.marker.DtfScheduleMarkers
 import com.xmitya.ideadtf.model.CronMark
 import com.xmitya.ideadtf.model.DtfCronModel
@@ -264,11 +264,14 @@ class DtfFlowGraphBuilder(private val project: Project) {
     /** Where the schedule is written, so that a double-click behaves like the clock gutter icon. */
     private fun cronPointerOf(task: PsiClass) = run {
         val taskName = DtfTaskDefResolver.resolveCached(task).taskName
-        val site = taskName?.let {
-            DtfCronConfigSource.EP.extensionList.firstNotNullOfOrNull { source ->
-                source.findSites(project, it, searchScope).firstOrNull()
-            }
-        }
+        val sites = taskName?.let { name ->
+            DtfTaskConfigSource.EP.extensionList.flatMap { it.findSites(project, name, searchScope) }
+        }.orEmpty()
+        // Only an entry that declares a cron: the timer stands for the schedule, not for the
+        // settings block, and a live cron outranks a profile that blanks it out. Every source is
+        // asked rather than the first one that answers, because the YAML file may configure the
+        // task while the cron itself lives in a .properties one.
+        val site = sites.firstOrNull { !it.cron.isNullOrEmpty() } ?: sites.firstOrNull { it.cron != null }
         when {
             site != null -> PointerNavigatable(pointers.createSmartPsiFileRangePointer(site.file, TextRange(site.offset, site.offset)))
             else -> task.getAnnotation(DtfFqns.TASK_SCHEDULE_ANNOTATION)?.let { navigatableFor(it) }

@@ -1,17 +1,17 @@
-package com.xmitya.ideadtf.cron
+package com.xmitya.ideadtf.config
 
 import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.project.Project
 import com.intellij.psi.search.GlobalSearchScope
 
 /**
- * A configuration format cron schedules can be declared in.
+ * A configuration format DTF task settings can be declared in.
  *
  * An extension point rather than direct calls so that the YAML implementation can live behind an
  * optional dependency: with the YAML plugin disabled its descriptor is not loaded, this list is
  * simply empty, and nothing in the core ever names a class it could not load.
  */
-interface DtfCronConfigSource {
+interface DtfTaskConfigSource {
 
     /**
      * Whether [taskName] is configured with a cron anywhere in [scope].
@@ -25,11 +25,11 @@ interface DtfCronConfigSource {
      *
      * Runs on click, inside a read action under a cancellable progress, so PSI is fair game here.
      */
-    fun findSites(project: Project, taskName: String, scope: GlobalSearchScope): List<CronConfigSite>
+    fun findSites(project: Project, taskName: String, scope: GlobalSearchScope): List<TaskConfigSite>
 
     companion object {
-        val EP: ExtensionPointName<DtfCronConfigSource> =
-            ExtensionPointName.create("com.xmitya.ideadtf.cronConfigSource")
+        val EP: ExtensionPointName<DtfTaskConfigSource> =
+            ExtensionPointName.create("com.xmitya.ideadtf.taskConfigSource")
     }
 }
 

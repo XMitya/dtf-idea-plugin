@@ -11,7 +11,7 @@ import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.util.CachedValuesManager
 import com.intellij.psi.util.PsiModificationTracker
 import com.xmitya.ideadtf.DtfFqns
-import com.xmitya.ideadtf.cron.DtfCronConfigSource
+import com.xmitya.ideadtf.config.DtfTaskConfigSource
 
 /** Where a task's schedule was declared. */
 enum class CronSource {
@@ -68,7 +68,7 @@ object DtfCronModel {
         if (taskName != null) {
             val project = psiClass.project
             val scope = GlobalSearchScope.projectScope(project)
-            for (source in DtfCronConfigSource.EP.extensionList) {
+            for (source in DtfTaskConfigSource.EP.extensionList) {
                 val summary = source.summarise(project, taskName, scope) ?: continue
                 // A file that only blanks the cron out disables the schedule rather than declaring
                 // one, so it does not make the task a cron task by itself.

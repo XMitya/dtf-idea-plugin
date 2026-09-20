@@ -35,7 +35,13 @@ this task" therefore means locating the constant first and running Find Usages o
 
 This plugin puts a **T** icon next to the task class. Clicking it searches the project and lists
 every scheduling site, with the enclosing method, its class and `file:line`; picking one navigates
-straight to that call. A single result navigates immediately.
+straight to that call.
+
+The same icon answers the other question a task raises — *how is this one set up*. A task's
+settings live under `task-properties.<TASK_NAME>` in `application.yaml`, keyed by the string in its
+`TaskDef` rather than by its class, so finding them means knowing that name and grepping for it.
+Every file declaring that block is listed below the call sites, labelled *task settings*, and opens
+on the `<TASK_NAME>:` line. A single result, of either kind, navigates immediately.
 
 The same detour exists in reverse. Reading `schedule(SOME_TASK_DEF, ctx)` and wanting the task that
 actually runs means Go To Declaration on the constant, landing in a holder class, and Find Usages
@@ -43,10 +49,12 @@ from there. So the call gets an icon of its own — the same **T**, with a red a
 resolves the task and jumps to it. A definition shared by several tasks, or picked by a conditional,
 opens a popup naming each task, its definition and `file:line`.
 
-A cron task has no call site to find. It carries a yellow **clock** instead of the **T**, and the
-click opens the place its schedule is configured — the `<TASK_NAME>:` line in `application.yaml`.
-Where several profiles configure the same task, all of them are listed, each showing its own cron
-expression, so the one that is actually switched off is visible rather than assumed.
+A cron task is launched by the framework rather than by any call, so it carries a yellow **clock**
+instead of the **T**. The click is the same one: `cron` is a setting in the same block as `timeout`
+and `retry`, so a scheduled task is just a task whose configuration happens to say when it runs.
+Where several profiles configure it, all of them are listed, each showing its own cron expression —
+so the one that is actually switched off is visible rather than assumed — and a task that is *also*
+scheduled explicitly still lists its callers above them.
 
 Both searches run on click, under a cancellable progress dialog, never during highlighting.
 
@@ -71,7 +79,8 @@ carrying the same **T** or **clock** icon. `scheduleJoin(...)` draws a BPMN para
 diamond with a `+` — that the branches converge on before the join task runs.
 
 Double-click opens what a box stands for: a task opens its class, calling code opens the exact
-`schedule()` line, a timer opens the `cron:` line configuring it. Hovering names the thing in full.
+`schedule()` line, a timer opens the entry configuring its `cron` — passing over a profile that
+only tunes the same task, since a timer stands for the schedule. Hovering names the thing in full.
 Ctrl/Cmd with the wheel zooms, dragging the background pans, and the toolbar has *Fit Content* for
 when a module turns out larger than expected.
 
@@ -176,6 +185,10 @@ relaxed binding, so `distributedTask`, `distributed-task` and a compressed
 `distributed-task.task-properties-group:` all reach the same place. Multiple YAML documents in one
 file are searched separately, which is how profiles are usually written.
 
+A block with no `cron` in it — `timeout`, `retry`, `max-parallel-in-cluster` — is a place to
+navigate to but **not** a schedule: it leaves the task on the **T**, and nothing about it puts a
+clock in the gutter.
+
 ## Known limitations
 
 - **Dispatch that is not statically decidable** is not resolved: bean-selector registries
@@ -202,12 +215,16 @@ file are searched separately, which is how profiles are usually written.
   wrapper's parameter, in either direction. A reference is followed through a local even when it
   sits inside a lambda, but not out of one — the body of a lambda is a value, not an argument of
   whatever the lambda was handed to.
-- **A group-wide `default-properties.cron` is ignored.** It sits *below* `@TaskSchedule` in the
-  framework's merge order, and honouring it would put a clock on every task in the module from one
-  line of YAML.
+- **A group-wide `default-properties.cron` is ignored**, and `default-properties` is not offered as
+  a navigation target either. It sits *below* `@TaskSchedule` in the framework's merge order, so
+  honouring it would put a clock on every task in the module from one line of YAML — and offering it
+  would put the identical row under every task in the project, which is noise rather than
+  navigation.
 - **A blank cron means disabled**, since `hasCron()` is `StringUtils.hasText`. `cron:`, `cron: ''`
   and `cron: ""` do not make a task a cron task; such entries are still listed in the popup, labelled,
-  because "configured here, and switched off" is the thing worth seeing.
+  because "configured here, and switched off" is the thing worth seeing. A block with no `cron` key
+  at all is listed too, labelled *task settings* — the three are told apart rather than lumped
+  together, since they answer different questions.
 - **Spring profiles are not evaluated.** Every file configuring the task is listed; which one is
   active at runtime is not something the IDE knows.
 - **`${VAR}` is not resolved** — it is shown as written and counts as a schedule. The expression is
@@ -215,8 +232,18 @@ file are searched separately, which is how profiles are usually written.
 - **Configuration is matched across the whole project.** Two modules using the same task name would
   see each other's files. Narrowing to the module would lose tasks that arrive as a binary dependency.
 - **`.properties` needs bracket notation** for the usual `SCREAMING_SNAKE` names: Spring normalises a
-  dotted map key to lower case, so only `task-properties[NAME].cron` binds. The dotted form is
+  dotted map key to lower case, so only `task-properties[NAME].<setting>` binds. The dotted form is
   recognised too, for the lower-case kebab names that do bind.
+- **A `.properties` file gives one row per task, not per setting.** A task is spread over as many
+  lines as it has settings there, and eight rows for one file is a list nobody reads; the row
+  anchors on the `cron` line when there is one, since that is what it is labelled with, and on the
+  first setting written otherwise. YAML gives one row per document, which is how profiles in a
+  single file stay distinguishable.
+- **A bare `<TASK_NAME>:` with nothing under it is not a target.** It configures nothing, and
+  accepting it would mean accepting scalars and sequences under `task-properties` as well.
+- **A task with one call site and one configuration block opens a popup** rather than jumping, where
+  it used to jump straight to the call. Call sites are listed first and the popup opens on the first
+  row, so Enter still lands on the call.
 - **A cron configured in code is not detected** — `registerTask(task, TaskSettings.builder().cron(…)
   .build())`. Knowing which task such a call registers means resolving its first argument, which is a
   project-wide search, and the gutter is decided during highlighting where searching is not allowed.
@@ -226,8 +253,6 @@ file are searched separately, which is how profiles are usually written.
   base class carrying it does not schedule its subclasses — which is what the framework does too.
 - **YAML-configured cron needs the YAML plugin.** It is bundled and enabled by default; with it
   switched off the plugin still loads and falls back to `@TaskSchedule` alone.
-- **The clock replaces the T**, so a cron task that is *also* scheduled explicitly no longer offers
-  its list of call sites.
 - **The tool window lists project sources only.** A task arriving as a binary dependency has no
   source to open and would be a row you cannot click, so it is left out — the same scope every other
   search here uses.

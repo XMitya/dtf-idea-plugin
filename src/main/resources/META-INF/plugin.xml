@@ -8,11 +8,13 @@
         Task Framework</a> (DTF).
         <p>Navigates between a DTF task and the places it is scheduled, in both directions. A gutter icon on
         every class implementing <code>com.distributed_task_framework.task.Task</code> lists the places it is
-        scheduled; an icon on every <code>schedule(...)</code> call opens the task it launches. Works for Java
-        and Kotlin sources.</p>
-        <p>Tasks the framework launches on a schedule - through <code>@TaskSchedule</code> or a
-        <code>cron</code> in <code>application.yaml</code>/<code>.properties</code> - are marked with a clock
-        instead, which opens the place the schedule is configured.</p>
+        scheduled and the places it is configured; an icon on every <code>schedule(...)</code> call opens the
+        task it launches. Works for Java and Kotlin sources.</p>
+        <p>Configuration means the task's own <code>task-properties</code> block in
+        <code>application.yaml</code>/<code>.properties</code>, whether it sets a <code>cron</code> or only a
+        timeout and a retry policy. Tasks the framework launches on a schedule - through
+        <code>@TaskSchedule</code> or such a <code>cron</code> - carry a clock instead of the plain icon, and
+        their list leads with the schedule.</p>
         <p>A <b>DTF Tasks</b> tool window lists every task in the project as a tree of project, module and
         task, named by its <code>TaskDef</code> and carrying the same icons as the gutter; double-click or
         Enter opens the task.</p>
@@ -33,8 +35,8 @@
     <extensionPoints>
         <!-- One per configuration format. The core asks this list rather than naming an
              implementation, which is what lets the YAML one be optional. -->
-        <extensionPoint name="cronConfigSource"
-                        interface="com.xmitya.ideadtf.cron.DtfCronConfigSource"
+        <extensionPoint name="taskConfigSource"
+                        interface="com.xmitya.ideadtf.config.DtfTaskConfigSource"
                         dynamic="true"/>
     </extensionPoints>
 
@@ -45,7 +47,7 @@
         <codeInsight.lineMarkerProvider language="UAST"
                                         implementationClass="com.xmitya.ideadtf.marker.DtfScheduleCallLineMarkerProvider"/>
         <!-- Filters on the file extension, so it needs no dependency on the Properties plugin. -->
-        <fileBasedIndex implementation="com.xmitya.ideadtf.cron.properties.DtfCronPropertiesIndex"/>
+        <fileBasedIndex implementation="com.xmitya.ideadtf.config.properties.DtfTaskConfigPropertiesIndex"/>
 
         <!-- The id doubles as the stripe label. The icon names the classic 13x13 path; the mapping
              file below redirects it to the new UI's icons/expui variants, where the stripe picks up
@@ -81,6 +83,6 @@
     </actions>
 
     <extensions defaultExtensionNs="com.xmitya.ideadtf">
-        <cronConfigSource implementation="com.xmitya.ideadtf.cron.properties.PropertiesCronConfigSource"/>
+        <taskConfigSource implementation="com.xmitya.ideadtf.config.properties.PropertiesTaskConfigSource"/>
     </extensions>
 </idea-plugin>

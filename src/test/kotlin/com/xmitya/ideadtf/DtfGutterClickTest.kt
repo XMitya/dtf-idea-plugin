@@ -141,6 +141,52 @@ class DtfGutterClickTest : DtfFixtureTestCase() {
     }
 
     /**
+     * The feature this all exists for: an ordinary task opens its own configuration block.
+     *
+     * Nobody schedules this task from code, so before the configuration was searched the click had
+     * nothing to offer at all - even though the project says plainly how the task is set up.
+     */
+    fun testClickingAPlainTaskWithOnlyConfigurationOpensIt() {
+        addTask("app/HelloTask.java", "HELLO_TASK")
+        val yaml = addSettingsYaml("app/src/main/resources/application.yaml")
+        myFixture.configureFromExistingVirtualFile(findFile("app/HelloTask.java"))
+
+        clickGutter(DtfIcons.TaskGutter)
+
+        assertEquals(yaml.virtualFile, openedFile())
+        assertEquals("HELLO_TASK:", textAtCaret(11))
+    }
+
+    /** Two kinds of answer in one list, so neither is picked for the reader. */
+    fun testATaskWithACallSiteAndConfigurationOffersBoth() {
+        addTask("app/HelloTask.java", "HELLO_TASK")
+        addCaller("app/First.java", "First")
+        addSettingsYaml("app/src/main/resources/application.yaml")
+        myFixture.configureFromExistingVirtualFile(findFile("app/HelloTask.java"))
+
+        clickGutter(DtfIcons.TaskGutter)
+
+        assertEquals(findFile("app/HelloTask.java"), openedFile())
+    }
+
+    /**
+     * A cron task that is also scheduled explicitly keeps its call sites.
+     *
+     * The clock used to replace the T and with it the whole list of callers; one handler for both
+     * icons is what gives them back, so the click has two answers and opens neither.
+     */
+    fun testACronTaskThatIsAlsoScheduledOffersItsCallSites() {
+        addTask("app/HelloTask.java", "HELLO_TASK", cron = true)
+        addCaller("app/First.java", "First")
+        addYaml("app/src/main/resources/application.yaml", "0 0 1 * * *")
+        myFixture.configureFromExistingVirtualFile(findFile("app/HelloTask.java"))
+
+        clickGutter(DtfIcons.CronGutter)
+
+        assertEquals(findFile("app/HelloTask.java"), openedFile())
+    }
+
+    /**
      * A cron that exists only as the annotation is still an answer.
      *
      * There is nothing to open - the schedule is in the source the icon sits on - so the click has
@@ -354,6 +400,17 @@ class DtfGutterClickTest : DtfFixtureTestCase() {
             task-properties:
               HELLO_TASK:
                 cron: $cron
+        """.trimIndent(),
+    )
+
+    private fun addSettingsYaml(path: String) = myFixture.addFileToProject(
+        path,
+        """
+        distributed-task:
+          task-properties-group:
+            task-properties:
+              HELLO_TASK:
+                max-parallel-in-cluster: 1
         """.trimIndent(),
     )
 

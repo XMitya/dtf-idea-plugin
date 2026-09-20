@@ -1,8 +1,10 @@
 package com.xmitya.ideadtf
 
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.xmitya.ideadtf.flow.DtfFlowEdgeKind
 import com.xmitya.ideadtf.flow.DtfFlowScope
 import com.xmitya.ideadtf.flow.DtfFlowTaskNode
+import com.xmitya.ideadtf.flow.DtfFlowTimerNode
 
 /**
  * The shape the diagram is built from: who starts a flow, what each task hands on, and where the
@@ -102,6 +104,42 @@ class DtfFlowGraphBuilderTest : DtfFlowFixtureTestCase() {
         assertEquals(listOf("NIGHTLY", "timer:0 0 1 * * *"), graph.nodeNames())
         assertEquals(listOf("timer -> NIGHTLY"), graph.arrows())
         assertTrue((graph.nodes.first { it is DtfFlowTaskNode } as DtfFlowTaskNode).isCron)
+    }
+
+    /**
+     * The timer stands for the schedule, so it opens the file that declares one.
+     *
+     * Every `task-properties` entry is a configuration site now, cron or not, and the settings-only
+     * file here sorts ahead of the real one - so taking whichever site comes first would land the
+     * double-click on a block that schedules nothing.
+     */
+    fun testTimerAnchorsOnTheCronRatherThanASettingsOnlyFile() {
+        myFixture.addFileToProject(
+            "app/src/main/resources/application-a.yaml",
+            """
+            distributed-task:
+              task-properties-group:
+                task-properties:
+                  NIGHTLY:
+                    max-parallel-in-cluster: 1
+            """.trimIndent(),
+        )
+        val withCron = myFixture.addFileToProject(
+            "app/src/main/resources/application.yaml",
+            """
+            distributed-task:
+              task-properties-group:
+                task-properties:
+                  NIGHTLY:
+                    cron: 0 0 1 * * *
+            """.trimIndent(),
+        )
+        addJavaTask("NightlyTask", "NIGHTLY")
+
+        val timer = buildFlowOf("NightlyTask").nodes.filterIsInstance<DtfFlowTimerNode>().single()
+        requireNotNull(timer.target) { "the timer has nothing to open" }.navigate(true)
+
+        assertEquals(withCron.virtualFile, FileEditorManager.getInstance(project).selectedEditor?.file)
     }
 
     /** Everything a module holds, whether or not the flows are connected to each other. */
