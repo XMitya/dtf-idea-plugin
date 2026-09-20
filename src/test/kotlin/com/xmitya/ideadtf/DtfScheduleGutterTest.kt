@@ -91,10 +91,10 @@ class DtfScheduleGutterTest : DtfFixtureTestCase() {
     }
 
     /**
-     * Inside a wrapper's own forward the TaskDef is whatever the caller passed, so there is no task
-     * to name here and the icon would lead nowhere.
+     * Inside a wrapper's own forward the TaskDef is whatever the caller passed - which is an answer
+     * the click can go and fetch, so the icon belongs here.
      */
-    fun testWrapperForwardOfItsOwnParameterIsNotMarked() {
+    fun testWrapperForwardOfItsOwnParameterIsMarked() {
         myFixture.configureByText(
             "SneakyScheduler.java",
             """
@@ -107,6 +107,42 @@ class DtfScheduleGutterTest : DtfFixtureTestCase() {
 
                 public <T> void schedule(TaskDef<T> taskDef, ExecutionContext<T> ctx) throws Exception {
                     distributedTaskService.schedule(taskDef, ctx);
+                }
+            }
+            """.trimIndent(),
+        )
+        assertEquals(1, scheduleGutters().size)
+    }
+
+    /**
+     * A method that takes a TaskDef without launching anything is not a wrapper, however it is
+     * named. Typing alone would make every logger and mapper taking a definition a schedule site.
+     */
+    fun testMethodTakingATaskDefWithoutForwardingIsNotMarked() {
+        addJavaTask()
+        myFixture.addFileToProject(
+            "DefLogger.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+            import com.distributed_task_framework.model.TaskDef;
+
+            public class DefLogger {
+                public <T> void scheduleAudit(TaskDef<T> taskDef, ExecutionContext<T> ctx) {
+                    System.out.println(taskDef.getTaskName());
+                }
+            }
+            """.trimIndent(),
+        )
+        myFixture.configureByText(
+            "AuditCaller.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+
+            public class AuditCaller {
+                private DefLogger defLogger;
+
+                public void run() {
+                    defLogger.scheduleAudit(HelloTask.HELLO, ExecutionContext.simple("x"));
                 }
             }
             """.trimIndent(),
@@ -126,9 +162,14 @@ class DtfScheduleGutterTest : DtfFixtureTestCase() {
             """
             import com.distributed_task_framework.model.ExecutionContext;
             import com.distributed_task_framework.model.TaskDef;
+            import com.distributed_task_framework.service.DistributedTaskService;
 
             public class SneakyScheduler {
-                public <T> void schedule(TaskDef<T> taskDef, ExecutionContext<T> ctx) throws Exception {}
+                private DistributedTaskService distributedTaskService;
+
+                public <T> void schedule(TaskDef<T> taskDef, ExecutionContext<T> ctx) throws Exception {
+                    distributedTaskService.schedule(taskDef, ctx);
+                }
             }
             """.trimIndent(),
         )

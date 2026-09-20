@@ -315,9 +315,14 @@ class ScheduledTaskSearcherTest : DtfFixtureTestCase() {
             """
             import com.distributed_task_framework.model.ExecutionContext;
             import com.distributed_task_framework.model.TaskDef;
+            import com.distributed_task_framework.service.DistributedTaskService;
 
             public class SneakyScheduler {
-                public <T> void schedule(TaskDef<T> taskDef, ExecutionContext<T> ctx) throws Exception {}
+                private DistributedTaskService distributedTaskService;
+
+                public <T> void schedule(TaskDef<T> taskDef, ExecutionContext<T> ctx) throws Exception {
+                    distributedTaskService.schedule(taskDef, ctx);
+                }
             }
             """.trimIndent(),
         )
@@ -354,17 +359,28 @@ class ScheduledTaskSearcherTest : DtfFixtureTestCase() {
             }
             """.trimIndent(),
         )
-        myFixture.configureByText(
+        myFixture.addFileToProject(
             "KotlinScheduler.kt",
             """
             import com.distributed_task_framework.model.ExecutionContext
             import com.distributed_task_framework.model.TaskDef
+            import com.distributed_task_framework.service.DistributedTaskService
 
-            class KotlinScheduler {
-                fun <T> schedule(taskDef: TaskDef<T>, context: ExecutionContext<T>) = Unit
+            class KotlinScheduler(private val distributedTaskService: DistributedTaskService) {
+                fun <T> schedule(taskDef: TaskDef<T>, context: ExecutionContext<T>) {
+                    distributedTaskService.schedule(taskDef, context)
+                }
+            }
+            """.trimIndent(),
+        )
+        myFixture.configureByText(
+            "Caller.kt",
+            """
+            import com.distributed_task_framework.model.ExecutionContext
 
+            class Caller(private val scheduler: KotlinScheduler) {
                 fun run() {
-                    schedule(context = ExecutionContext.simple("x"), taskDef = NamedTask.TASK_DEF)
+                    scheduler.schedule(context = ExecutionContext.simple("x"), taskDef = NamedTask.TASK_DEF)
                 }
             }
             """.trimIndent(),
@@ -422,6 +438,8 @@ class ScheduledTaskSearcherTest : DtfFixtureTestCase() {
      */
     fun testJavaTernaryThroughPrivateHelper() {
         addTwoTasks()
+        // Both the call into the helper and the helper's own forward are marked, and the second
+        // one answers by asking the callers - so the two agree.
         myFixture.configureByText(
             "Listener.java",
             """
@@ -443,7 +461,11 @@ class ScheduledTaskSearcherTest : DtfFixtureTestCase() {
             }
             """.trimIndent(),
         )
-        assertEquals(listOf("HelloTask", "OtherTask"), tasksForSingleCall())
+        val calls = allCalls()
+        assertEquals("expected both calls to be marked, got " + calls.map { it.second }, 2, calls.size)
+        for ((tasks, text) in calls) {
+            assertEquals("wrong tasks for " + text, listOf("HelloTask", "OtherTask"), tasks)
+        }
     }
 
     /** The self-reschedule is inherited, so every concrete task below the base is an answer. */
@@ -640,11 +662,63 @@ class ScheduledTaskSearcherTest : DtfFixtureTestCase() {
             """.trimIndent(),
         )
 
+        assertRoundTrip("distributedTaskService.schedule(taskDef", listOf("HelloTask", "OtherTask"))
+    }
+
+    /**
+     * The same agreement for the shape that used to fall through the floor: a conditional inside a
+     * lambda, handed to a project wrapper.
+     *
+     * The call checked is the one the caller wrote, not the wrapper's own forward. That forward now
+     * resolves backwards too, by asking the callers, but the forward search deliberately reports
+     * the caller's line instead - one line per task rather than the wrapper's shared internals.
+     */
+    fun testRoundTripAgreesForAConditionalInsideALambda() {
+        addTwoTasks()
+        myFixture.configureByText(
+            "NewAppFileEventListener.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+            import com.distributed_task_framework.model.TaskDef;
+            import com.distributed_task_framework.service.DistributedTaskService;
+            import java.util.List;
+
+            public class NewAppFileEventListener {
+                private DistributedTaskService distributedTaskService;
+
+                public void onReceive(List<String> events) {
+                    events.forEach(event -> {
+                        var taskDef = event.isEmpty() ? HelloTask.HELLO : OtherTask.OTHER;
+                        try {
+                            schedule(taskDef, event);
+                        } catch (Exception e) {
+                            // ignored
+                        }
+                    });
+                }
+
+                void schedule(TaskDef<String> taskDef, String payload) throws Exception {
+                    distributedTaskService.schedule(taskDef, ExecutionContext.simple(payload));
+                }
+            }
+            """.trimIndent(),
+        )
+
+        assertRoundTrip("schedule(taskDef, event)", listOf("HelloTask", "OtherTask"))
+    }
+
+    /**
+     * Both directions agree about the marked call whose text contains [callText]: it resolves to
+     * [expectedTasks], and each of those lists this very call among its own schedule sites.
+     */
+    private fun assertRoundTrip(callText: String, expectedTasks: List<String>) {
         ReadAction.run<RuntimeException> {
-            val call = leavesOf(myFixture.file).firstNotNullOf { DtfScheduleMarkers.scheduleCallAt(it) }
+            val call = leavesOf(myFixture.file)
+                .mapNotNull { DtfScheduleMarkers.scheduleCallAt(it) }
+                .first { it.sourcePsi?.text?.contains(callText) == true }
             val callOffset = call.sourcePsi!!.textRange.startOffset
             val tasks = ScheduledTaskSearcher(project).findTasks(call)
-            assertEquals(listOf("HelloTask", "OtherTask"), tasks.map { it.qualifiedName })
+            assertEquals(expectedTasks, tasks.map { it.qualifiedName })
 
             val forward = ScheduleCallSearcher(project)
             for (task in tasks) {
@@ -655,6 +729,76 @@ class ScheduledTaskSearcherTest : DtfFixtureTestCase() {
                 )
             }
         }
+    }
+
+    /**
+     * Inside a wrapper's own forward the definition is whatever each caller passed, so the answer
+     * is the union over the callers - which is why the icon is worth showing there at all.
+     */
+    fun testWrapperParameterResolvesThroughCallers() {
+        addTwoTasks()
+        myFixture.addFileToProject(
+            "WrapperCaller.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+
+            public class WrapperCaller {
+                private SneakyScheduler sneakyScheduler;
+
+                public void run() throws Exception {
+                    sneakyScheduler.schedule(HelloTask.HELLO, ExecutionContext.simple("x"));
+                    sneakyScheduler.schedule(OtherTask.OTHER, ExecutionContext.simple("y"));
+                }
+            }
+            """.trimIndent(),
+        )
+        myFixture.configureByText(
+            "SneakyScheduler.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+            import com.distributed_task_framework.model.TaskDef;
+            import com.distributed_task_framework.service.DistributedTaskService;
+
+            public class SneakyScheduler {
+                private DistributedTaskService distributedTaskService;
+
+                public <T> void schedule(TaskDef<T> taskDef, ExecutionContext<T> ctx) throws Exception {
+                    distributedTaskService.schedule(taskDef, ctx);
+                }
+            }
+            """.trimIndent(),
+        )
+        assertEquals(listOf("HelloTask", "OtherTask"), tasksForSingleCall())
+    }
+
+    /** A TaskDef parameter its own method never forwards leads nowhere, so nothing is reported. */
+    fun testParameterOfANonForwardingMethodResolvesToNothing() {
+        addTwoTasks()
+        myFixture.addFileToProject(
+            "AuditCaller.java",
+            """
+            public class AuditCaller {
+                private DefLogger defLogger;
+
+                public void run() {
+                    defLogger.scheduleAudit(HelloTask.HELLO, "x");
+                }
+            }
+            """.trimIndent(),
+        )
+        myFixture.configureByText(
+            "DefLogger.java",
+            """
+            import com.distributed_task_framework.model.TaskDef;
+
+            public class DefLogger {
+                public void scheduleAudit(TaskDef<String> taskDef, String payload) {
+                    System.out.println(taskDef.getTaskName() + payload);
+                }
+            }
+            """.trimIndent(),
+        )
+        assertEmpty(allCalls())
     }
 
     /** The tasks resolved for the only schedule call in the file under the caret. */
