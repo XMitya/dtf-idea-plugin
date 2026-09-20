@@ -54,15 +54,23 @@ object DtfFqns {
     /** The only attribute of [TASK_SCHEDULE_ANNOTATION]. */
     const val CRON_ATTRIBUTE = "cron"
 
+    /** Waits for a set of already-scheduled tasks; the only static evidence a join exists. */
+    const val SCHEDULE_JOIN = "scheduleJoin"
+
+    /** Schedules a task *outside* the enclosing join hierarchy - not a fan-out, despite the name. */
+    const val SCHEDULE_FORK = "scheduleFork"
+
+    const val SCHEDULE_IMMEDIATELY = "scheduleImmediately"
+
     /**
      * Methods that launch a task. `scheduleUnsafe` only exists since DTF 2.x; listing it here is
      * harmless on 1.x.
      */
     val SCHEDULE_METHODS: Set<String> = setOf(
         "schedule",
-        "scheduleFork",
-        "scheduleImmediately",
+        SCHEDULE_FORK,
+        SCHEDULE_IMMEDIATELY,
         "scheduleUnsafe",
-        "scheduleJoin",
+        SCHEDULE_JOIN,
     )
 }

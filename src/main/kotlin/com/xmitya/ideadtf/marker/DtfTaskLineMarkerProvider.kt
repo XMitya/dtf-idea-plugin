@@ -40,7 +40,7 @@ class DtfTaskLineMarkerProvider : LineMarkerProviderDescriptor() {
         val taskClass = DtfTaskMarkers.taskClassAt(element) ?: return null
         val cron = DtfCronModel.cronMarkOf(taskClass) is CronMark.Cron
 
-        return LineMarkerInfo(
+        return DtfFlowMenuLineMarkerInfo(
             element,
             element.textRange,
             if (cron) DtfIcons.CronGutter else DtfIcons.TaskGutter,

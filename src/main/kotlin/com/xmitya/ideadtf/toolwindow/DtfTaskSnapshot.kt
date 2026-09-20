@@ -1,8 +1,7 @@
 package com.xmitya.ideadtf.toolwindow
 
-import com.intellij.ide.util.PsiNavigationSupport
-import com.intellij.pom.Navigatable
 import com.intellij.psi.SmartPsiElementPointer
+import com.xmitya.ideadtf.search.PointerNavigatable
 
 /**
  * One task, as the tool window shows it.
@@ -23,23 +22,11 @@ class DtfTaskEntry(
     /** The cron this task runs on, when it is a cron task and the expression could be read. */
     val cronExpression: String?,
     val isCron: Boolean,
-    private val pointer: SmartPsiElementPointer<*>,
-) : Navigatable {
+    pointer: SmartPsiElementPointer<*>,
+) : PointerNavigatable(pointer) {
 
     /** What the row leads with, and what sorting and speed search key on. */
     val displayName: String get() = taskName ?: className
-
-    override fun navigate(requestFocus: Boolean) {
-        val file = pointer.virtualFile ?: return
-        val offset = pointer.range?.startOffset ?: return
-        PsiNavigationSupport.getInstance()
-            .createNavigatable(pointer.project, file, offset)
-            .navigate(requestFocus)
-    }
-
-    override fun canNavigate(): Boolean = pointer.virtualFile != null
-
-    override fun canNavigateToSource(): Boolean = canNavigate()
 }
 
 /** The tasks of one module. [moduleName] is null for the sources that belong to no module. */

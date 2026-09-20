@@ -48,7 +48,7 @@ class TaskTargetsNavigationHandler : GutterIconNavigationHandler<PsiElement> {
 
         when (targets.size) {
             0 -> showMessage(event, DtfBundle.message("dtf.popup.task.empty"))
-            1 -> targets.single().navigate()
+            1 -> targets.single().navigate(true)
             else -> showPopup(event, targets)
         }
     }
@@ -57,7 +57,7 @@ class TaskTargetsNavigationHandler : GutterIconNavigationHandler<PsiElement> {
         val title = DtfBundle.message("dtf.popup.task.title", targets.size)
         // The overload taking presentations as a parallel list, rather than the one taking a
         // function: that one is marked internal API.
-        createTargetPopup(title, targets, targets.map { it.presentation }) { it.navigate() }
+        createTargetPopup(title, targets, targets.map { it.presentation }) { it.navigate(true) }
             .show(RelativePoint(event))
     }
 

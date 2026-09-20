@@ -60,7 +60,7 @@ class CronConfigNavigationHandler : GutterIconNavigationHandler<PsiElement> {
 
         when (sites.size) {
             0 -> showMessage(event, annotationMessageFor(taskClass))
-            1 -> sites.single().navigate()
+            1 -> sites.single().navigate(true)
             else -> showPopup(event, taskClass, sites)
         }
     }
@@ -74,7 +74,7 @@ class CronConfigNavigationHandler : GutterIconNavigationHandler<PsiElement> {
         }
         // The overload taking presentations as a parallel list, rather than the one taking a
         // function: that one is marked internal API.
-        createTargetPopup(title, sites, sites.map { it.presentation }) { it.navigate() }
+        createTargetPopup(title, sites, sites.map { it.presentation }) { it.navigate(true) }
             .show(RelativePoint(event))
     }
 

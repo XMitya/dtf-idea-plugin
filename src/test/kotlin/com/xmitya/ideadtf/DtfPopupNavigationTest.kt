@@ -48,7 +48,7 @@ class DtfPopupNavigationTest : DtfFixtureTestCase() {
             val found = ScheduleCallSearcher(project).findScheduleSites(findClass("app.HelloTask"))
             ScheduleSitePresenter(project).present(found)
         }.single()
-        site.navigate()
+        site.navigate(true)
 
         assertEquals(caller.virtualFile, openedFile())
         assertEquals("distributedTaskService.schedule", textAtCaret(31))
@@ -71,7 +71,7 @@ class DtfPopupNavigationTest : DtfFixtureTestCase() {
             val found = DtfCronConfigSource.EP.extensionList.flatMap { it.findSites(project, "HELLO_TASK", scope) }
             CronSitePresenter(project).present(found)
         }.single()
-        site.navigate()
+        site.navigate(true)
 
         assertEquals(yaml.virtualFile, openedFile())
         // The site anchors on the task's entry rather than the `cron` line under it, so that a
@@ -102,7 +102,7 @@ class DtfPopupNavigationTest : DtfFixtureTestCase() {
             val call = leavesOfConfiguredFile().firstNotNullOf { DtfScheduleMarkers.scheduleCallAt(it) }
             TaskTargetPresenter(project).present(ScheduledTaskSearcher(project).findTasks(call))
         }.single()
-        target.navigate()
+        target.navigate(true)
 
         assertEquals(task.virtualFile, openedFile())
         assertEquals("HelloTask", textAtCaret(9))

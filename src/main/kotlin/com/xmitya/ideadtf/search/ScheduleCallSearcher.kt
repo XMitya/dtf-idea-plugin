@@ -2,25 +2,20 @@ package com.xmitya.ideadtf.search
 
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
-import com.intellij.psi.CommonClassNames
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
-import com.intellij.psi.PsiModifier
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.MethodReferencesSearch
 import com.intellij.psi.util.InheritanceUtil
-import com.xmitya.ideadtf.DtfFqns
 import com.xmitya.ideadtf.model.DtfTaskDefResolver
+import com.xmitya.ideadtf.model.DtfTaskHierarchy
 import org.jetbrains.uast.UCallExpression
-import org.jetbrains.uast.UClass
 import org.jetbrains.uast.UElement
 import org.jetbrains.uast.UMethod
 import org.jetbrains.uast.UReferenceExpression
 import org.jetbrains.uast.UVariable
 import org.jetbrains.uast.getUCallExpression
-import org.jetbrains.uast.toUElement
-import org.jetbrains.uast.toUElementOfType
 import org.jetbrains.uast.visitor.AbstractUastVisitor
 
 /**
@@ -32,10 +27,6 @@ class ScheduleCallSearcher(private val project: Project) {
 
     /** One hop through a local variable, and one hop through a wrapper's parameter. */
     private val maxDepth = 2
-
-    private companion object {
-        const val SCHEDULE_PREFIX = "schedule"
-    }
 
     fun findScheduleSites(taskClass: PsiClass): List<ScheduleCallSite> {
         val found = LinkedHashMap<Pair<String, Int>, ScheduleCallSite>()
@@ -100,26 +91,13 @@ class ScheduleCallSearcher(private val project: Project) {
         enclosingMethod.accept(object : AbstractUastVisitor() {
             override fun visitElement(node: UElement): Boolean {
                 ProgressManager.checkCanceled()
-                if (node is UReferenceExpression && isSameDeclaration(node.resolve(), declaration)) {
+                if (node is UReferenceExpression && UastDeclarations.denotes(node.resolve(), declaration)) {
                     node.sourcePsi?.let { reads += it }
                 }
                 return false
             }
         })
         return reads
-    }
-
-    /**
-     * Whether [resolved] denotes [declaration].
-     *
-     * Kotlin resolves a read of a local to a synthetic `UastKotlinPsiVariable` rather than to the
-     * `KtProperty` that declares it, and its navigation element does not lead back either. Going
-     * through UAST and comparing source PSI is what bridges the two.
-     */
-    private fun isSameDeclaration(resolved: PsiElement?, declaration: PsiElement): Boolean {
-        if (resolved == null) return false
-        if (resolved === declaration || resolved.navigationElement === declaration) return true
-        return resolved.toUElement()?.sourcePsi === declaration
     }
 
     /**
@@ -131,8 +109,8 @@ class ScheduleCallSearcher(private val project: Project) {
      * anyway, because `task.def` on some *other* task must not be attributed here.
      */
     private fun collectSelfSchedules(taskClass: PsiClass, found: MutableMap<Pair<String, Int>, ScheduleCallSite>) {
-        for (owner in supertypeClosure(taskClass)) {
-            val uClass = asSourceUClass(owner) ?: continue
+        for (owner in DtfTaskHierarchy.supertypeClosure(taskClass)) {
+            val uClass = DtfTaskHierarchy.asSourceUClass(owner) ?: continue
             uClass.accept(object : AbstractUastVisitor() {
                 override fun visitCallExpression(node: UCallExpression): Boolean {
                     ProgressManager.checkCanceled()
@@ -162,15 +140,7 @@ class ScheduleCallSearcher(private val project: Project) {
         scope: GlobalSearchScope,
     ) {
         val taskFqn = taskClass.qualifiedName ?: return
-        val schedulingMethods = supertypeClosure(taskClass)
-            .flatMap { it.methods.asIterable() }
-            .filter {
-                it.name.startsWith(SCHEDULE_PREFIX) &&
-                    !it.hasModifierProperty(PsiModifier.STATIC) &&
-                    !it.hasModifierProperty(PsiModifier.ABSTRACT)
-            }
-
-        for (method in schedulingMethods) {
+        for (method in DtfTaskHierarchy.schedulingHelpersOf(taskClass)) {
             ProgressManager.checkCanceled()
             for (reference in MethodReferencesSearch.search(method, scope, true).findAll()) {
                 ProgressManager.checkCanceled()
@@ -182,24 +152,6 @@ class ScheduleCallSearcher(private val project: Project) {
                 }
             }
         }
-    }
-
-    /** The class plus everything it inherits from, minus the framework interface itself. */
-    private fun supertypeClosure(taskClass: PsiClass): List<PsiClass> {
-        val seen = LinkedHashSet<PsiClass>()
-        fun walk(psiClass: PsiClass) {
-            if (psiClass.qualifiedName == DtfFqns.TASK) return
-            if (psiClass.qualifiedName == CommonClassNames.JAVA_LANG_OBJECT) return
-            if (!seen.add(psiClass)) return
-            psiClass.supers.forEach(::walk)
-        }
-        walk(taskClass)
-        return seen.toList()
-    }
-
-    private fun asSourceUClass(psiClass: PsiClass): UClass? {
-        val source = psiClass.navigationElement?.takeIf { it.isValid } ?: psiClass
-        return source.toUElementOfType<UClass>() ?: psiClass.toUElementOfType<UClass>()
     }
 
     private fun addSite(call: UCallExpression, tier: ScheduleTier, found: MutableMap<Pair<String, Int>, ScheduleCallSite>) {
