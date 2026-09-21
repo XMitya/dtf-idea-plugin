@@ -22,8 +22,10 @@ import com.intellij.ui.treeStructure.Tree
 import com.intellij.util.EditSourceOnDoubleClickHandler
 import com.intellij.util.EditSourceOnEnterKeyHandler
 import com.xmitya.ideadtf.DtfBundle
+import com.xmitya.ideadtf.DtfFileColors
 import com.xmitya.ideadtf.flow.DtfFlowScope
 import com.xmitya.ideadtf.flow.action.DtfFlowDataKeys
+import java.awt.Color
 import javax.swing.JComponent
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
@@ -42,7 +44,18 @@ class DtfTaskTreePanel(private val project: Project) : SimpleToolWindowPanel(tru
 
     private val root = DefaultMutableTreeNode()
     private val treeModel = DefaultTreeModel(root)
-    private val tree = Tree(treeModel)
+    private val tree = object : Tree(treeModel) {
+        /**
+         * A task declared in test sources reads as one at a glance, in the colour the IDE gives
+         * that file everywhere else. The platform reads both of these back through
+         * `TreePathBackgroundSupplier`, which [Tree] implements; file colours being switched off
+         * is answered inside [DtfFileColors], so it is not asked about again here.
+         */
+        override fun isFileColorsEnabled(): Boolean = true
+
+        /** Module and project rows stand for no file, so they stay plain. */
+        override fun getFileColorFor(userObject: Any?): Color? = DtfFileColors.of(project, (userObject as? DtfTaskEntry)?.virtualFile)
+    }
 
     /** Stamp of the snapshot on screen, and of the one being fetched; see [refreshIfStale]. */
     private var shownStamp: Long? = null
