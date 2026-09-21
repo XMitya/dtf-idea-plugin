@@ -1,19 +1,23 @@
 package com.xmitya.ideadtf
 
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiRecursiveElementWalkingVisitor
+import com.intellij.psi.SmartPointerManager
 import com.intellij.psi.search.GlobalSearchScope
 import com.xmitya.ideadtf.config.DtfTaskConfigSource
 import com.xmitya.ideadtf.marker.DtfScheduleMarkers
+import com.xmitya.ideadtf.search.PointerNavigatable
 import com.xmitya.ideadtf.search.ScheduleCallSearcher
 import com.xmitya.ideadtf.search.ScheduleSitePresenter
 import com.xmitya.ideadtf.search.ScheduledTaskSearcher
 import com.xmitya.ideadtf.search.TaskConfigSitePresenter
 import com.xmitya.ideadtf.search.TaskTargetPresenter
+import java.util.concurrent.TimeUnit
 
 /**
  * Picking a row in the popup has to land somewhere.
@@ -130,6 +134,29 @@ class DtfPopupNavigationTest : DtfFixtureTestCase() {
 
         assertEquals(task.virtualFile, openedFile())
         assertEquals("HelloTask", textAtCaret(9))
+    }
+
+    /**
+     * The offset a jump lands on, resolved with no read action around the call - which is how the
+     * UI calls it: the diagram's mouse listener and `EditSourceOnDoubleClickHandler` both navigate
+     * straight from a Swing event. Asking for it on the test thread proves nothing, because the EDT
+     * holds the write-intent lock and so hands the pointer the read access it needs for free; on a
+     * pooled thread the missing read action is an error instead, which is what the IDE reports when
+     * a box in the diagram is double-clicked and the task's file has not been parsed yet.
+     */
+    fun testTheTargetOffsetIsResolvedWithoutAnAmbientReadAction() {
+        val task = addTask("app/HelloTask.java")
+        val navigatable = ReadAction.compute<PointerNavigatable, RuntimeException> {
+            PointerNavigatable(SmartPointerManager.getInstance(project).createSmartPsiElementPointer(findClass("app.HelloTask")))
+        }
+
+        val offset = ApplicationManager.getApplication()
+            .executeOnPooledThread<Int> { requireNotNull(navigatable.targetOffset()) { "the pointer points at nothing" } }
+            .get(1, TimeUnit.MINUTES)
+
+        assertEquals(task.virtualFile, navigatable.virtualFile)
+        // The class name, which is where the jump lands - the same anchor the popup opens on.
+        assertEquals(task.text.indexOf("HelloTask implements"), offset)
     }
 
     private fun addTask(path: String): PsiFile = myFixture.addFileToProject(
