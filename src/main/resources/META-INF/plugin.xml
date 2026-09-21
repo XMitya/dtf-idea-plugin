@@ -14,7 +14,8 @@
         <code>application.yaml</code>/<code>.properties</code>, whether it sets a <code>cron</code> or only a
         timeout and a retry policy. Tasks the framework launches on a schedule - through
         <code>@TaskSchedule</code> or such a <code>cron</code> - carry a clock instead of the plain icon, and
-        their list leads with the schedule.</p>
+        their list leads with the schedule. Rows coming from test sources or test resources sit on the green
+        background IDEA gives test files, following <i>Settings | Appearance &amp; Behavior | File Colors</i>.</p>
         <p>A <b>DTF Tasks</b> tool window lists every task in the project as a tree of project, module and
         task, named by its <code>TaskDef</code> and carrying the same icons as the gutter; double-click or
         Enter opens the task. A right-click offers the same two searches the gutter does - where the task is

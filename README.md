@@ -56,6 +56,12 @@ Where several profiles configure it, all of them are listed, each showing its ow
 so the one that is actually switched off is visible rather than assumed — and a task that is *also*
 scheduled explicitly still lists its callers above them.
 
+Anything coming out of a test source root or a test resource root sits on the green background
+IDEA gives test files in *Find in Files*, in every one of these lists — `application-test.yml` is
+told from `application.yml`, and a call from an integration test from a production one, without
+reading the container beside it. The colour is the IDE's own: whatever *Settings | Appearance &
+Behavior | File Colors* says, including nothing at all when it is switched off.
+
 Both searches run on click, under a cancellable progress dialog, never during highlighting.
 
 Those three icons, and the tool window, all answer questions about one task at a time. The one they
@@ -107,7 +113,8 @@ the class name and, for a cron task, the expression beside it in grey; double-cl
 the task. A right-click carries the gutter's two questions over — *Go to Task Configuration* and *Go
 to Schedule Calls* open the same lists the icon does — and copies either name the row is known by:
 the `TaskDef` or the qualified class name. Ctrl/Cmd+C copies what the selected rows are called,
-tasks, modules and the project alike. Typing finds a task or a module by name, reaching into
+tasks, modules and the project alike. A task declared in test sources carries the same green
+background its file has elsewhere in the IDE. Typing finds a task or a module by name, reaching into
 collapsed modules, so nothing has to be opened first. The stripe button appears only in projects that have DTF on the classpath. The scan runs
 when the panel is first opened, and again when it is shown after the project has changed — so
 returning to it costs nothing when nothing has moved.
@@ -228,6 +235,9 @@ clock in the gutter.
   because "configured here, and switched off" is the thing worth seeing. A block with no `cron` key
   at all is listed too, labelled *task settings* — the three are told apart rather than lumped
   together, since they answer different questions.
+- **Test sources are marked, not filtered.** Every list still includes them; they are only easier
+  to see. The green comes from *File Colors*, so it follows whatever is configured there and
+  disappears with it — the plugin defines no scope and no colour of its own.
 - **Spring profiles are not evaluated.** Every file configuring the task is listed; which one is
   active at runtime is not something the IDE knows.
 - **`${VAR}` is not resolved** — it is shown as written and counts as a schedule. The expression is

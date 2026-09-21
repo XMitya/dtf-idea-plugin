@@ -1,6 +1,7 @@
 package com.xmitya.ideadtf.search
 
 import com.intellij.ide.util.PsiNavigationSupport
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.pom.Navigatable
 import com.intellij.psi.SmartPsiElementPointer
 
@@ -13,15 +14,18 @@ import com.intellij.psi.SmartPsiElementPointer
  */
 open class PointerNavigatable(private val pointer: SmartPsiElementPointer<*>) : Navigatable {
 
+    /** The file pointed into. Navigating needs it, and so does colouring a row by its source root. */
+    val virtualFile: VirtualFile? get() = pointer.virtualFile
+
     override fun navigate(requestFocus: Boolean) {
-        val file = pointer.virtualFile ?: return
+        val file = virtualFile ?: return
         val offset = pointer.range?.startOffset ?: return
         PsiNavigationSupport.getInstance()
             .createNavigatable(pointer.project, file, offset)
             .navigate(requestFocus)
     }
 
-    override fun canNavigate(): Boolean = pointer.virtualFile != null
+    override fun canNavigate(): Boolean = virtualFile != null
 
     override fun canNavigateToSource(): Boolean = canNavigate()
 }

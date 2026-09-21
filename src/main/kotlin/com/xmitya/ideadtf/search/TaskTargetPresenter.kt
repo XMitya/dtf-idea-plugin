@@ -8,6 +8,7 @@ import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.SmartPointerManager
 import com.xmitya.ideadtf.DtfBundle
+import com.xmitya.ideadtf.DtfFileColors
 import com.xmitya.ideadtf.model.DtfTaskDefResolver
 
 /**
@@ -35,7 +36,9 @@ class TaskTargetPresenter(private val project: Project) {
         val qualifiedName = taskClass.qualifiedName
         val taskName = DtfTaskDefResolver.resolveCached(taskClass).taskName
 
-        var builder = TargetPresentation.builder(presentable).icon(AllIcons.Nodes.Class)
+        var builder = TargetPresentation.builder(presentable)
+            .icon(AllIcons.Nodes.Class)
+            .backgroundColor(DtfFileColors.of(project, anchor.containingFile?.virtualFile))
         if (qualifiedName != null) {
             val container = if (taskName != null) {
                 DtfBundle.message("dtf.target.named", qualifiedName, taskName)

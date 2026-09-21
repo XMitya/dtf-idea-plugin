@@ -9,6 +9,7 @@ import com.intellij.platform.backend.presentation.TargetPresentation
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.SmartPointerManager
 import com.xmitya.ideadtf.DtfBundle
+import com.xmitya.ideadtf.DtfFileColors
 import com.xmitya.ideadtf.config.TaskConfigSite
 
 /**
@@ -59,6 +60,7 @@ class TaskConfigSitePresenter(private val project: Project) {
         var builder = TargetPresentation.builder(presentable)
         if (virtualFile != null) {
             builder = builder.icon(virtualFile.fileType.icon)
+                .backgroundColor(DtfFileColors.of(project, virtualFile))
             containerOf(virtualFile)?.let { builder = builder.containerText(it) }
         }
         locationOf(site)?.let { builder = builder.locationText(it) }

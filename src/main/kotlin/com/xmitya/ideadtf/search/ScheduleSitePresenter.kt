@@ -5,6 +5,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.platform.backend.presentation.TargetPresentation
 import com.intellij.psi.SmartPointerManager
 import com.xmitya.ideadtf.DtfBundle
+import com.xmitya.ideadtf.DtfFileColors
 
 /**
  * Renders schedule call sites for the popup.
@@ -28,6 +29,7 @@ class ScheduleSitePresenter(private val project: Project) {
 
         var builder = TargetPresentation.builder(label.presentable(fallback))
             .icon(if (label.method != null) AllIcons.Nodes.Method else AllIcons.Nodes.Class)
+            .backgroundColor(DtfFileColors.of(project, site.element.containingFile?.virtualFile))
         label.qualifiedName?.let { container ->
             val suffix = if (site.tier == ScheduleTier.WRAPPER) " - " + DtfBundle.message("dtf.tier.wrapper") else ""
             builder = builder.containerText(container + suffix)
