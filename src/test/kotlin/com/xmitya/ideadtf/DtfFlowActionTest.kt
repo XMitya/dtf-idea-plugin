@@ -8,6 +8,8 @@ import com.intellij.openapi.actionSystem.DataContext
 import com.intellij.openapi.actionSystem.LangDataKeys
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.psi.PsiElement
+import com.intellij.psi.impl.FakePsiElement
 import com.intellij.testFramework.TestActionEvent
 import com.xmitya.ideadtf.flow.DtfFlowScope
 import com.xmitya.ideadtf.flow.action.DtfFlowDataKeys
@@ -136,6 +138,25 @@ class DtfFlowActionTest : DtfFlowFixtureTestCase() {
             .build()
 
         assertTrue(update(context).isEnabledAndVisible)
+    }
+
+    /**
+     * In an editor popup `PSI_ELEMENT` is whatever the caret resolves to, and outside a JVM file that
+     * can be a fake element standing in for a reference target - a config key in a YAML file resolves
+     * to one. Such an element has no text, so reading it as source blew the menu up with an NPE.
+     */
+    fun testAnElementWithoutTextOffersNothing() {
+        addJavaTask("HelloTask", "HELLO")
+        val config = myFixture.addFileToProject("application.yaml", "commons:\n  jackson:\n    disable-nulls: true\n")
+
+        val context = SimpleDataContext.builder().add(CommonDataKeys.PSI_ELEMENT, TextlessElement(config)).build()
+
+        assertFalse(update(context).isEnabledAndVisible)
+    }
+
+    /** Stands in for the platform's own textless elements, as every [FakePsiElement] is. */
+    private class TextlessElement(private val anchor: PsiElement) : FakePsiElement() {
+        override fun getParent(): PsiElement = anchor
     }
 
     private fun update(context: DataContext) = TestActionEvent.createTestEvent(action, withProject(context))

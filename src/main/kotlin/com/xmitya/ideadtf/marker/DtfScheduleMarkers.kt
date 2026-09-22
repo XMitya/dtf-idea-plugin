@@ -42,9 +42,13 @@ object DtfScheduleMarkers {
      */
     fun scheduleCallAt(element: PsiElement): UCallExpression? {
         if (element.firstChild != null) return null
+        // Childless is not the same as a leaf of a source file: an editor popup hands over whatever
+        // the caret resolves to, and that can be a fake element standing in for a reference target -
+        // a config key in a YAML file is one - whose text is null however non-null getText() looks.
+        val text = element.text ?: return null
         // A pure string test, so unrelated calls cost nothing. It also excludes the framework's
         // other TaskDef-taking methods - rescheduleByTaskDef, cancelAllTaskByTaskDef - for free.
-        if (!element.text.startsWith(SCHEDULE_PREFIX, ignoreCase = true)) return null
+        if (!text.startsWith(SCHEDULE_PREFIX, ignoreCase = true)) return null
 
         val call = callAt(element) ?: return null
         // A Kotlin constructor is a UCallExpression too, and `ScheduleRequest(DEF, ctx)` otherwise
