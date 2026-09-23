@@ -17,7 +17,9 @@ import org.jetbrains.uast.UElement
 import org.jetbrains.uast.UExpression
 import org.jetbrains.uast.ULambdaExpression
 import org.jetbrains.uast.UMethod
+import org.jetbrains.uast.UQualifiedReferenceExpression
 import org.jetbrains.uast.UReferenceExpression
+import org.jetbrains.uast.UThisExpression
 import org.jetbrains.uast.UVariable
 import org.jetbrains.uast.getUParentForIdentifier
 import org.jetbrains.uast.nonStructuralChildren
@@ -45,6 +47,14 @@ object CallArgumentMatcher {
      * these chains get.
      */
     private const val MAX_FORWARD_DEPTH = 2
+
+    /**
+     * How many methods called on `this` a task's scheduling helper may go through before it reaches
+     * the call that hands over `getDef()`. The shared bases chain their overloads -
+     * `schedule(message)` to `schedule(message, Duration.ZERO)` to the real one - and a task adds
+     * its own on top.
+     */
+    private const val MAX_SELF_LAUNCH_DEPTH = 4
 
     /** A call, the method it resolves to, and the parameter the reference fills. */
     data class ScheduleArgCall(val call: UCallExpression, val method: PsiMethod, val parameterIndex: Int)
@@ -263,15 +273,71 @@ object CallArgumentMatcher {
     }
 
     /**
-     * The task a call's receiver is declared as, if it is one.
+     * The task a call's receiver is declared as, if it is one and the call launches it.
      *
      * Some bases expose their own `schedule(message)` and fill in the `TaskDef` internally, so the
      * call mentions no definition at all and the receiver is the only thing naming the task. A
      * receiver typed as the shared base is not one task and yields nothing.
+     *
+     * The method has to be one that launches its receiver - see [launchesOwnTask]. A task's own
+     * `scheduleFileProcessing(file)` called on `this` has a task receiver just the same, and it
+     * launches the *next* task, not this one.
      */
     fun receiverTask(call: UCallExpression): PsiClass? {
         val receiverType = call.receiverType ?: return null
         val psiClass = PsiUtil.resolveClassInClassTypeOnly(receiverType) ?: return null
-        return psiClass.takeIf { DtfTaskModel.isMarkableTask(it) }
+        if (!DtfTaskModel.isMarkableTask(psiClass)) return null
+        val method = call.resolve() ?: return null
+        return psiClass.takeIf { launchesOwnTask(method) }
+    }
+
+    /**
+     * Whether [method] launches the task it is called on: its body hands the task's own `getDef()`
+     * to a scheduling call, directly or through another method called on `this`.
+     *
+     * Neither the name nor the owner tells this apart from a task launching something else - a
+     * public `scheduleFileProcessing(file)` on one task is as much a `schedule*` method of a task as
+     * the bases' `schedule(message)` is. Only the body does.
+     *
+     * Cached per method: this runs during highlighting, for every scheduling-named call on a task.
+     */
+    fun launchesOwnTask(method: PsiMethod): Boolean = CachedValuesManager.getProjectPsiDependentCache(method) {
+        computeLaunchesOwnTask(it, MAX_SELF_LAUNCH_DEPTH, HashSet())
+    }
+
+    private fun computeLaunchesOwnTask(method: PsiMethod, depth: Int, seen: MutableSet<PsiMethod>): Boolean {
+        if (depth <= 0 || !seen.add(method)) return false
+        val body = asSourceUMethod(method) ?: return false
+        var launches = false
+        body.accept(object : AbstractUastVisitor() {
+            override fun visitCallExpression(node: UCallExpression): Boolean {
+                ProgressManager.checkCanceled()
+                if (launches) return true
+                val callee = node.resolve() ?: return false
+                launches = passesOwnDef(node, callee) || (isOnThis(node) && computeLaunchesOwnTask(callee, depth - 1, seen))
+                return false
+            }
+        })
+        return launches
+    }
+
+    /** Whether [call] hands `this` task's `getDef()` to a parameter through which [callee] launches a task. */
+    private fun passesOwnDef(call: UCallExpression, callee: PsiMethod): Boolean = launchParameters(callee).any { index ->
+        val argument = call.getArgumentForParameter(index)
+        argument != null && nonStructuralChildren(argument).anyMatch { resolvesToGetDef(it) && isOnThis(it) }
+    }
+
+    /**
+     * Whether [expression] is addressed to the object whose code it is written in: unqualified, or
+     * qualified by `this`. `otherTask.def` names another task, and `otherTask.schedule(...)`
+     * launches it.
+     */
+    private fun isOnThis(expression: UExpression): Boolean {
+        val receiver = when (expression) {
+            is UQualifiedReferenceExpression -> expression.receiver
+            is UCallExpression -> expression.receiver
+            else -> null
+        }
+        return receiver == null || receiver is UThisExpression
     }
 }

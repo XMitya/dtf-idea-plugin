@@ -556,6 +556,61 @@ class ScheduleCallSearcherTest : DtfFixtureTestCase() {
         )
     }
 
+    /**
+     * A task's public `schedule*` helper that launches a different task is not a way of launching
+     * this one, so its callers are not this task's call sites - the framework call inside it
+     * belongs to the task it names.
+     */
+    fun testTaskHelperLaunchingAnotherTaskIsAttributedToThatTask() {
+        myFixture.addFileToProject(
+            "FileScanTask.kt",
+            """
+            import com.distributed_task_framework.model.TaskDef
+            import com.distributed_task_framework.task.Task
+
+            class FileScanTask : Task<String> {
+                override fun getDef(): TaskDef<String> = TASK_DEF
+
+                companion object {
+                    val TASK_DEF: TaskDef<String> = TaskDef.privateTaskDef("FILE_SCAN", String::class.java)
+                }
+            }
+            """.trimIndent(),
+        )
+        myFixture.addFileToProject(
+            "PathScanTask.kt",
+            """
+            import com.distributed_task_framework.model.ExecutionContext
+            import com.distributed_task_framework.model.TaskDef
+            import com.distributed_task_framework.service.DistributedTaskService
+            import com.distributed_task_framework.task.Task
+
+            class PathScanTask(private val distributedTaskService: DistributedTaskService) : Task<String> {
+                override fun getDef(): TaskDef<String> = TASK_DEF
+
+                override fun execute(executionContext: ExecutionContext<String>) {
+                    listOf("a", "b").forEach { file -> scheduleFileScan(file) }
+                }
+
+                fun scheduleFileScan(file: String) {
+                    distributedTaskService.schedule(FileScanTask.TASK_DEF, ExecutionContext.simple(file))
+                }
+
+                companion object {
+                    val TASK_DEF: TaskDef<String> = TaskDef.privateTaskDef("PATH_SCAN", String::class.java)
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val ownSites = search("PathScanTask")
+        assertEmpty("the helper launches another task, got " + ownSites.map { it.element.text }, ownSites)
+
+        val targetSites = search("FileScanTask")
+        assertEquals(listOf(ScheduleTier.SERVICE), targetSites.map { it.tier })
+        assertTrue(targetSites.single().element.text.contains("FileScanTask.TASK_DEF"))
+    }
+
     /** A receiver typed as the shared base cannot be attributed to any single task. */
     fun testSchedulableBaseReceiverIsNotAttributed() {
         myFixture.addFileToProject(

@@ -99,10 +99,12 @@ object DtfScheduleMarkers {
      * the first: the framework pins the definition to position 0, a project wrapper does not.
      */
     fun launchesATask(call: UCallExpression): Boolean {
-        // A receiver that is a task names the task by itself - but only when the call is a scheduling
-        // one. Without that guard any helper called on `this` inside a task, `ids()` or `getDef()`,
-        // reads as `someTask.schedule(message)` and the task appears to schedule itself.
-        if (CallArgumentMatcher.receiverTask(call) != null && isNamedLikeSchedule(call)) return true
+        // A receiver that is a task names the task by itself - but only through one of the task's
+        // own scheduling helpers. Without that, any method called on `this` inside a task reads as
+        // `someTask.schedule(message)`: `ids()`, `getDef()`, or a `scheduleFileProcessing(file)`
+        // that launches the next task. The name is the cheap half of the test; the receiver check
+        // reads the body.
+        if (isNamedLikeSchedule(call) && CallArgumentMatcher.receiverTask(call) != null) return true
         val method = call.resolve() ?: return false
         return CallArgumentMatcher.launchParameters(method).any { index ->
             val argument = call.getArgumentForParameter(index)
