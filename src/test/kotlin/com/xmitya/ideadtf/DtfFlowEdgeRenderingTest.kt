@@ -91,6 +91,16 @@ class DtfFlowEdgeRenderingTest : UsefulTestCase() {
         assertEquals(2, kinds.count { it == PathIterator.SEG_CUBICTO } / ARCS_PER_SEMICIRCLE)
     }
 
+    /** Arrows side by side crossed at once hop once: a second bridge on top of the first would be a smudge. */
+    fun testCoincidentHopsDrawOneBridge() {
+        val points = listOf(FlowPoint(0, 50), FlowPoint(200, 50))
+        val hops = listOf(FlowPoint(100, 50), FlowPoint(100, 50), FlowPoint(102, 50))
+
+        val kinds = segmentKinds(DtfFlowEdgePainter.pathOf(points, DtfFlowEdgeStyle.ORTHOGONAL, hops, 4))
+
+        assertEquals(1, kinds.count { it == PathIterator.SEG_CUBICTO } / ARCS_PER_SEMICIRCLE)
+    }
+
     /** A hop that belongs to another arrow's run must not bend this one. */
     fun testAHopOffTheLineIsIgnored() {
         val points = listOf(FlowPoint(0, 50), FlowPoint(100, 50))

@@ -38,7 +38,15 @@ object DtfFlowEdgePainter {
     private fun appendSegments(path: Path2D.Double, points: List<FlowPoint>, hops: List<FlowPoint>, hopRadius: Int) {
         for ((from, to) in points.zipWithNext()) {
             val onThis = hops.filter { isOn(it, from, to) }.sortedBy { distance(from, it) }
-            for (hop in onThis) appendHop(path, hop, from, to, hopRadius)
+            var previous: FlowPoint? = null
+            for (hop in onThis) {
+                // Two bridges closer than one is wide would overlap, and the second would start behind
+                // the end of the first - drawing the line back under it. One bridge says "crossing" as
+                // well as two: this happens where arrows side by side are crossed at once.
+                if (previous != null && distance(previous, hop) < 2 * hopRadius) continue
+                appendHop(path, hop, from, to, hopRadius)
+                previous = hop
+            }
             path.lineTo(to.x.toDouble(), to.y.toDouble())
         }
     }

@@ -57,9 +57,9 @@ so the one that is actually switched off is visible rather than assumed — and 
 scheduled explicitly still lists its callers above them.
 
 Anything coming out of a test source root or a test resource root sits on the green background
-IDEA gives test files in *Find in Files*, in every one of these lists — `application-test.yml` is
-told from `application.yml`, and a call from an integration test from a production one, without
-reading the container beside it. The colour is the IDE's own: whatever *Settings | Appearance &
+IDEA gives test files in *Find in Files*, in every one of these lists — and on the flow diagram's
+boxes too — `application-test.yml` is told from `application.yml`, and a call from an integration
+test from a production one, without reading the container beside it. The colour is the IDE's own: whatever *Settings | Appearance &
 Behavior | File Colors* says, including nothing at all when it is switched off.
 
 Both searches run on click, under a cancellable progress dialog, never during highlighting.
@@ -82,13 +82,28 @@ The diagram runs left to right. Calling code — the method whose body schedules
 dashed box on the left; a cron task starts from a timer instead, showing its expression. Tasks are
 boxes named the way the tool window names them: the `TaskDef` in bold, the class beside it in grey,
 carrying the same **T** or **clock** icon. `scheduleJoin(...)` draws a BPMN parallel gateway — a
-diamond with a `+` — that the branches converge on before the join task runs.
+diamond with a `+` — that the branches converge on before the join task runs. A box standing for
+code in test sources is green, as it is in the gutter's popup and the tool window.
 
 Double-click opens what a box stands for: a task opens its class, calling code opens the exact
 `schedule()` line, a timer opens the entry configuring its `cron` — passing over a profile that
 only tunes the same task, since a timer stands for the schedule. Hovering names the thing in full.
-Ctrl/Cmd with the wheel zooms, dragging the background pans, and the toolbar has *Fit Content* for
-when a module turns out larger than expected.
+Ctrl/Cmd with the wheel zooms, and so does a **pinch** on a Mac trackpad — both about the point under
+the cursor, which stays put while everything around it grows or shrinks. Dragging the background
+pans, and the toolbar has *Fit Content* for when a module turns out larger than expected; it zooms out
+as far as 10%, far enough to take in a whole module and zoom back into the part that matters.
+
+A module's diagram is usually many small flows that share nothing. Each is arranged on its own —
+its callers directly in front of the task they call, each box opposite the boxes it is connected to
+— and the flows are then **tiled** in rows towards the proportions of a screen, rather than merged
+into one set of columns fifty tasks tall. Between two columns every square arrow turns on a **track
+of its own**: arrows into the same task share one, as a bus, and arrows into different tasks never
+do, so where a line goes can be followed rather than guessed. A gap widens when more arrows have to
+turn in it than it has room for.
+
+To follow one chain through a crowded diagram, right-click a box and choose **Highlight Flow**:
+everything that leads to it and everything it leads to, as far as the arrows go, is drawn in orange
+and the rest fades out. **Esc** — or *Clear Highlight* on the same menu — puts it back.
 
 Where one arrow crosses another it makes a small **bridge** over it, so that two lines passing and
 two lines meeting can be told apart at a glance — only one of any pair hops, or the crossing would

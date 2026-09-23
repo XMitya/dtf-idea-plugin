@@ -79,9 +79,10 @@ object DtfFlowLayoutActions {
         override fun actionPerformed(e: AnActionEvent) = canvas.resetPositions()
     }
 
-    /** The same actions the toolbar has, for a right-click on the diagram itself. */
+    /** Highlighting the chain of the box clicked, then the same layout actions the toolbar has. */
     fun popupGroup(canvas: DtfFlowCanvas): DefaultActionGroup = DefaultActionGroup().apply {
-        add(group(canvas))
+        addAll(DtfFlowHighlightActions.group(canvas))
         add(Separator.getInstance())
+        add(group(canvas))
     }
 }

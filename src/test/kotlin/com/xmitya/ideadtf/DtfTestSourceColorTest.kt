@@ -4,6 +4,7 @@ import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.roots.ContentEntry
 import com.intellij.openapi.roots.ModifiableRootModel
+import com.intellij.openapi.util.Disposer
 import com.intellij.pom.java.LanguageLevel
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.scope.TestsScope
@@ -11,6 +12,12 @@ import com.intellij.testFramework.LightProjectDescriptor
 import com.intellij.ui.FileColorManager
 import com.intellij.ui.treeStructure.Tree
 import com.xmitya.ideadtf.config.DtfTaskConfigSource
+import com.xmitya.ideadtf.flow.DtfFlowCallerNode
+import com.xmitya.ideadtf.flow.DtfFlowGraph
+import com.xmitya.ideadtf.flow.DtfFlowGraphBuilder
+import com.xmitya.ideadtf.flow.DtfFlowScope
+import com.xmitya.ideadtf.flow.DtfFlowTaskNode
+import com.xmitya.ideadtf.flow.editor.DtfFlowPanel
 import com.xmitya.ideadtf.search.DtfTaskSearcher
 import com.xmitya.ideadtf.search.NavigableScheduleSite
 import com.xmitya.ideadtf.search.NavigableTaskConfigSite
@@ -65,6 +72,28 @@ class DtfTestSourceColorTest : DtfFixtureTestCase() {
         assertEquals(setOf("Caller.java:10", "CallerTest.java:10"), byLocation.keys)
         assertNull(byLocation["Caller.java:10"])
         assertEquals(testsColor, byLocation["CallerTest.java:10"])
+    }
+
+    /** The diagram paints a test caller's box the way the popup paints its row, and leaves the rest plain. */
+    fun testAFlowBoxForATestCallerIsColouredAndAProductionOneIsNot() {
+        addTask("app/HelloTask.java", "app", "HelloTask", "HELLO_TASK")
+        addCaller("app/Caller.java", "app", "Caller")
+        addCaller("tst/app/CallerTest.java", "app", "CallerTest")
+        val scope = DtfFlowScope.Task("app.HelloTask", "HELLO_TASK")
+        val graph = ReadAction.compute<DtfFlowGraph, RuntimeException> { DtfFlowGraphBuilder(project).build(scope) }
+        val panel = DtfFlowPanel(project, scope)
+        try {
+            panel.show(graph)
+
+            val canvas = panel.flowCanvas()
+            val byClass = graph.nodes.filterIsInstance<DtfFlowCallerNode>().associate { it.className to canvas.fileColorOfNode(it.id) }
+            assertEquals(setOf("Caller", "CallerTest"), byClass.keys)
+            assertNull(byClass["Caller"])
+            assertEquals(testsColor, byClass["CallerTest"])
+            assertNull(canvas.fileColorOfNode(graph.nodes.filterIsInstance<DtfFlowTaskNode>().single().id))
+        } finally {
+            Disposer.dispose(panel)
+        }
     }
 
     fun testConfigurationInTestResourcesIsColouredAndInMainResourcesIsNot() {
