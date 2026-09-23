@@ -119,6 +119,14 @@ class DtfFlowLayoutTest : UsefulTestCase() {
         val input = graph(listOf("a", "b", "c", "target"), edge("a", "target"), edge("b", "target"), edge("c", "target"))
 
         assertEquals(layout(input).nodes, layout(input).nodes)
+        assertEquals(layout(input).edges.map { it.points }, layout(input).edges.map { it.points })
+    }
+
+    /** The waypoints a long arrow is routed through are not boxes: nothing can be clicked or hovered there. */
+    fun testWaypointsAreNotBoxes() {
+        val layout = layout(graph(listOf("a", "b", "c"), edge("a", "b"), edge("b", "c"), edge("a", "c")))
+
+        assertEquals(setOf("a", "b", "c"), layout.nodes.keys)
     }
 
     fun testEmptyGraphHasNothingToArrange() {

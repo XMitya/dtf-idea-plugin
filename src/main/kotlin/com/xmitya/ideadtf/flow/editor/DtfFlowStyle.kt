@@ -26,6 +26,8 @@ object DtfFlowStyle {
         labelSlot = FlowSize(JBUI.scale(120), JBUI.scale(16)),
         dummyHeight = JBUI.scale(8),
         padding = JBUI.scale(20),
+        trackSpacing = JBUI.scale(12),
+        componentGap = JBUI.scale(44),
     )
 
     fun horizontalPadding(): Int = JBUI.scale(12)
@@ -54,13 +56,30 @@ object DtfFlowStyle {
     val canvasBackground: JBColor = JBColor.namedColor("Editor.background", JBColor(0xFFFFFF, 0x2B2B2B))
     val joinAccent: JBColor = JBColor.namedColor("Component.focusColor", JBColor(0x3574F0, 0x548AF7))
 
+    /**
+     * A highlighted flow. Orange rather than the accent blue, which the join gateways already use -
+     * a highlighted join has to stay tellable from a plain one.
+     */
+    val flowHighlight: JBColor = JBColor(0xE8871E, 0xF0A33D)
+
+    /** How far a highlight fades everything it does not take in: still readable, clearly behind. */
+    const val DIMMED_ALPHA = 0.25f
+
     val greyText: Color get() = UIUtil.getInactiveTextColor()
 
     fun edgeStroke(): BasicStroke = BasicStroke(JBUI.scale(1).toFloat())
 
     /** A guess is drawn as a guess: an inferred join and a detached fork both read as "not stated". */
-    fun dashedStroke(): BasicStroke = BasicStroke(
-        JBUI.scale(1).toFloat(),
+    fun dashedStroke(): BasicStroke = dashed(JBUI.scale(1).toFloat())
+
+    /** Twice as heavy, so a highlighted chain stands out by weight as well as colour; dashes stay dashes. */
+    fun highlightStroke(dashed: Boolean): BasicStroke {
+        val width = JBUI.scale(2).toFloat()
+        return if (dashed) dashed(width) else BasicStroke(width)
+    }
+
+    private fun dashed(width: Float): BasicStroke = BasicStroke(
+        width,
         BasicStroke.CAP_BUTT,
         BasicStroke.JOIN_MITER,
         JBUI.scale(4).toFloat(),

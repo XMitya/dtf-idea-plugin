@@ -1,14 +1,23 @@
 package com.xmitya.ideadtf
 
+import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.actionSystem.CommonShortcuts
+import com.intellij.openapi.actionSystem.ToggleAction
+import com.intellij.openapi.actionSystem.ex.ActionUtil
+import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.testFramework.TestActionEvent
+import com.intellij.ui.components.JBScrollPane
+import com.intellij.ui.components.JBViewport
 import com.xmitya.ideadtf.flow.DtfFlowCallerNode
 import com.xmitya.ideadtf.flow.DtfFlowEdge
 import com.xmitya.ideadtf.flow.DtfFlowEdgeKind
 import com.xmitya.ideadtf.flow.DtfFlowGatewayNode
 import com.xmitya.ideadtf.flow.DtfFlowGraph
 import com.xmitya.ideadtf.flow.DtfFlowNode
+import com.xmitya.ideadtf.flow.DtfFlowScope
 import com.xmitya.ideadtf.flow.DtfFlowTaskNode
 import com.xmitya.ideadtf.flow.DtfFlowTimerNode
 import com.xmitya.ideadtf.flow.GatewayKind
@@ -17,6 +26,7 @@ import com.xmitya.ideadtf.flow.editor.DtfFlowEdgeStyle
 import com.xmitya.ideadtf.flow.editor.DtfFlowLayoutActions
 import com.xmitya.ideadtf.flow.layout.DtfFlowOrientation
 import com.xmitya.ideadtf.flow.layout.FlowPoint
+import java.awt.Color
 import java.awt.Dimension
 import java.awt.Point
 import java.awt.image.BufferedImage
@@ -93,7 +103,257 @@ class DtfFlowCanvasTest : DtfFlowFixtureTestCase() {
         assertEquals(3.0, canvas.zoom)
 
         canvas.zoom = 0.01
-        assertEquals(0.25, canvas.zoom)
+        assertEquals(0.1, canvas.zoom)
+    }
+
+    /**
+     * Zooming keeps the point under the cursor where it is on screen; zooming about the corner
+     * throws the reader somewhere else in a large diagram with every step.
+     */
+    fun testZoomingKeepsThePointUnderTheCursorInPlace() {
+        canvas.setGraph(everyShape())
+        val pane = JBScrollPane(canvas)
+        pane.setSize(200, 100)
+        pane.validate()
+        val viewport = pane.viewport
+        viewport.viewPosition = Point(40, 20)
+        val anchor = Point(140, 70)
+        val onScreen = Point(anchor.x - viewport.viewPosition.x, anchor.y - viewport.viewPosition.y)
+
+        canvas.zoomAround(2.0, anchor)
+
+        assertEquals(2.0, canvas.zoom)
+        assertEquals(Point(anchor.x * 2, anchor.y * 2), Point(viewport.viewPosition.x + onScreen.x, viewport.viewPosition.y + onScreen.y))
+    }
+
+    /** Past the edge of the diagram there is nothing to keep in place; the view stops at the edge. */
+    fun testZoomingOutNearTheCornerStopsAtTheEdge() {
+        canvas.setGraph(everyShape())
+        val pane = JBScrollPane(canvas)
+        pane.setSize(200, 100)
+        pane.validate()
+        pane.viewport.viewPosition = Point(10, 10)
+
+        canvas.zoomAround(0.5, Point(200, 100))
+
+        assertEquals(Point(0, 0), pane.viewport.viewPosition)
+    }
+
+    /**
+     * A trackpad pinch: the platform asks the scroll pane's view - through its viewport, as it does
+     * in the IDE - to zoom about the fingers, and scrolls to the point it answers with.
+     */
+    fun testAPinchZoomsAboutTheFingers() {
+        val viewport = JBViewport()
+        viewport.view = canvas
+
+        val moved = requireNotNull(viewport.magnificator).magnify(2.0, Point(100, 50))
+
+        assertEquals(2.0, canvas.zoom)
+        assertEquals(Point(200, 100), moved)
+    }
+
+    fun testTheToolbarZoomsInAndBackOut() {
+        canvas.setGraph(everyShape())
+
+        canvas.zoomIn()
+        assertTrue(canvas.zoom > 1.0)
+
+        canvas.zoomOut()
+        assertEquals(1.0, canvas.zoom, 0.0001)
+    }
+
+    /** A box is painted in the colour its file has in the IDE; a box with no colour stays plain. */
+    fun testABoxTakesItsFileColour() {
+        canvas.fileColorOf = { if (it is DtfFlowCallerNode) Color.GREEN else null }
+        canvas.setGraph(everyShape())
+
+        assertEquals(Color.GREEN, canvas.fileColorOfNode("caller:1"))
+        assertNull(canvas.fileColorOfNode("Left"))
+        canvas.dispatchEvent(mouse(java.awt.event.MouseEvent.MOUSE_MOVED, centreOf(canvas.currentGraph().nodes.first())))
+        paint()
+    }
+
+    /** Right-clicking a box and choosing Highlight Flow lights up its chain and nothing else. */
+    fun testARightClickOnABoxHighlightsItsFlow() {
+        canvas.setGraph(everyShape())
+        val caller = canvas.currentGraph().nodes.first { it is DtfFlowCallerNode }
+        canvas.dispatchEvent(rightPress(centreOf(caller)))
+        val highlight = popupAction(DtfBundle.message("dtf.flow.highlight"))
+
+        val event = TestActionEvent.createTestEvent(highlight)
+        highlight.update(event)
+        assertTrue(event.presentation.isEnabledAndVisible)
+        highlight.actionPerformed(event)
+
+        assertEquals(setOf("caller:1", "Left", "join:1", "JoinTask", "Opaque"), canvas.highlightedNodeIds())
+        paint()
+        canvas.edgeStyle = DtfFlowEdgeStyle.CURVED
+        paint()
+    }
+
+    /** On the background there is no box whose flow could be meant. */
+    fun testHighlightIsNotOfferedOffABox() {
+        canvas.setGraph(everyShape())
+        canvas.size = canvas.preferredSize
+        canvas.dispatchEvent(rightPress(Point(-20, -20)))
+        val highlight = popupAction(DtfBundle.message("dtf.flow.highlight"))
+
+        val event = TestActionEvent.createTestEvent(highlight)
+        highlight.update(event)
+
+        assertFalse(event.presentation.isVisible)
+    }
+
+    /** Esc clears a highlight, and is left alone - for the IDE - while there is none. */
+    fun testEscapeClearsAHighlightAndOnlyThen() {
+        canvas.setGraph(everyShape())
+        val clear = popupAction(DtfBundle.message("dtf.flow.highlight.clear"))
+        assertTrue("Esc is not bound on the canvas", ActionUtil.getActions(canvas).contains(clear))
+        assertEquals(CommonShortcuts.ESCAPE.shortcuts.toList(), clear.shortcutSet.shortcuts.toList())
+
+        val idle = TestActionEvent.createTestEvent(clear)
+        clear.update(idle)
+        assertFalse(idle.presentation.isEnabled)
+
+        canvas.highlightFlowOf("Left")
+        val active = TestActionEvent.createTestEvent(clear)
+        clear.update(active)
+        assertTrue(active.presentation.isEnabled)
+        clear.actionPerformed(active)
+
+        assertFalse(canvas.hasHighlight)
+        canvas.clearHighlight() // a second time is a no-op
+    }
+
+    /** Hiding the calls from tests takes their boxes and arrows off; showing them brings both back. */
+    fun testHidingTestCallsTakesTheirBoxesOff() {
+        canvas.isInTests = { it is DtfFlowCallerNode }
+        canvas.setGraph(everyShape())
+        assertTrue(canvas.hasTestCalls)
+
+        canvas.showTests = false
+
+        assertNull(canvas.currentGraph().node("caller:1"))
+        assertTrue(canvas.currentGraph().edges.none { it.fromId == "caller:1" })
+        assertNotNull("a task stays, whatever calls it", canvas.currentGraph().node("Left"))
+        assertNull(canvas.nodeIdAt(Point(-20, -20)))
+        paint()
+
+        canvas.showTests = true
+        assertNotNull(canvas.currentGraph().node("caller:1"))
+        canvas.showTests = true // setting the same again changes nothing
+    }
+
+    /** Refresh rebuilds the diagram; it must not bring back what the reader hid. */
+    fun testARebuildKeepsTestCallsHidden() {
+        canvas.isInTests = { it is DtfFlowCallerNode }
+        canvas.showTests = false
+
+        canvas.setGraph(everyShape())
+
+        assertNull(canvas.currentGraph().node("caller:1"))
+    }
+
+    /** A box that is no longer drawn cannot stay selected - the menu would act on something invisible. */
+    fun testHidingASelectedBoxDropsTheSelection() {
+        canvas.isInTests = { it is DtfFlowCallerNode }
+        canvas.setGraph(everyShape())
+        canvas.dispatchEvent(rightPress(centreOf(canvas.currentGraph().nodes.first { it is DtfFlowCallerNode })))
+        assertEquals("caller:1", canvas.selectedNodeId)
+
+        canvas.showTests = false
+
+        assertNull(canvas.selectedNodeId)
+    }
+
+    /** A highlight follows what is drawn: it outlives the calls it does not start from, not the one it does. */
+    fun testAHighlightFollowsWhatIsDrawn() {
+        canvas.isInTests = { it is DtfFlowCallerNode }
+        canvas.setGraph(everyShape())
+        canvas.highlightFlowOf("Left")
+
+        canvas.showTests = false
+        assertEquals(setOf("Left", "join:1", "JoinTask", "Opaque"), canvas.highlightedNodeIds())
+        canvas.showTests = true
+        assertEquals(setOf("caller:1", "Left", "join:1", "JoinTask", "Opaque"), canvas.highlightedNodeIds())
+
+        canvas.highlightFlowOf("caller:1")
+        canvas.showTests = false
+        assertFalse(canvas.hasHighlight)
+    }
+
+    /** The toolbar button: pressed while tests are shown, greyed out on a diagram without any. */
+    fun testTheTestsButtonReflectsAndChangesTheDiagram() {
+        val toggle = DtfFlowLayoutActions.showTests(canvas) as ToggleAction
+        canvas.setGraph(everyShape())
+        val without = TestActionEvent.createTestEvent(toggle)
+        toggle.update(without)
+        assertFalse(without.presentation.isEnabled)
+
+        canvas.isInTests = { it is DtfFlowCallerNode }
+        canvas.setGraph(everyShape())
+        val with = TestActionEvent.createTestEvent(toggle)
+        toggle.update(with)
+        assertTrue(with.presentation.isEnabled)
+        assertTrue(toggle.isSelected(with))
+
+        toggle.setSelected(with, false)
+        assertFalse(canvas.showTests)
+        assertFalse(toggle.isSelected(with))
+    }
+
+    /** Show BPMN Flow on a task box opens that task's whole flow, in a tab of its own. */
+    fun testATaskBoxOpensItsOwnFlow() {
+        addJavaTask("HelloTask", "HELLO")
+        val graph = buildFlowOf("HelloTask")
+        canvas.setGraph(graph)
+        canvas.dispatchEvent(rightPress(centreOf(graph.nodes.single())))
+        val show = popupAction(DtfBundle.message("action.Dtf.ShowFlow.text"))
+
+        val event = TestActionEvent.createTestEvent(show, SimpleDataContext.getProjectContext(project))
+        show.update(event)
+        assertTrue(event.presentation.isEnabledAndVisible)
+        assertEquals(DtfBundle.message("dtf.flow.action.text.named", "HELLO"), event.presentation.text)
+        show.actionPerformed(event)
+
+        assertEquals(DtfBundle.message("dtf.flow.tab.title", "HELLO"), openedFile()?.name)
+    }
+
+    /** In the task's own tab there is nothing to open; on a caller there is no task to open. */
+    fun testShowFlowIsOfferedOnlyForAnotherTask() {
+        addJavaTask("HelloTask", "HELLO")
+        val graph = buildFlowOf("HelloTask")
+        canvas.setGraph(graph)
+        canvas.dispatchEvent(rightPress(centreOf(graph.nodes.single())))
+        val inOwnTab = popupAction(DtfBundle.message("action.Dtf.ShowFlow.text"), DtfFlowScope.Task("HelloTask", "HELLO"))
+        assertFalse(visibleWithProject(inOwnTab))
+
+        canvas.setGraph(everyShape())
+        val show = popupAction(DtfBundle.message("action.Dtf.ShowFlow.text"))
+        canvas.dispatchEvent(rightPress(centreOf(canvas.currentGraph().nodes.first { it is DtfFlowCallerNode })))
+        assertFalse(visibleWithProject(show))
+        show.actionPerformed(TestActionEvent.createTestEvent(show, SimpleDataContext.getProjectContext(project)))
+
+        assertNull(openedFile())
+    }
+
+    private fun visibleWithProject(action: AnAction): Boolean {
+        val event = TestActionEvent.createTestEvent(action, SimpleDataContext.getProjectContext(project))
+        action.update(event)
+        return event.presentation.isVisible
+    }
+
+    /** A rebuilt diagram may not have the boxes a highlight named, so it starts plain. */
+    fun testARebuildDropsTheHighlight() {
+        canvas.setGraph(everyShape())
+        canvas.highlightFlowOf("Right")
+        assertTrue(canvas.hasHighlight)
+
+        canvas.setGraph(everyShape())
+
+        assertFalse(canvas.hasHighlight)
+        assertTrue(canvas.highlightedNodeIds().isEmpty())
     }
 
     fun testFitContentShrinksADiagramLargerThanItsViewport() {
@@ -226,6 +486,22 @@ class DtfFlowCanvasTest : DtfFlowFixtureTestCase() {
         }
         return Point(0, 0)
     }
+
+    private fun popupAction(text: String, ownScope: DtfFlowScope? = null): AnAction =
+        DtfFlowLayoutActions.popupGroup(canvas, ownScope).getChildren(null).first { it.templatePresentation.text == text }
+
+    /** Not flagged as a popup trigger: the menu itself would need a screen to open on. */
+    private fun rightPress(point: Point) = java.awt.event.MouseEvent(
+        canvas,
+        java.awt.event.MouseEvent.MOUSE_PRESSED,
+        System.currentTimeMillis(),
+        java.awt.event.InputEvent.BUTTON3_DOWN_MASK,
+        point.x,
+        point.y,
+        1,
+        false,
+        java.awt.event.MouseEvent.BUTTON3,
+    )
 
     private fun press(point: Point) = java.awt.event.MouseEvent(
         canvas,

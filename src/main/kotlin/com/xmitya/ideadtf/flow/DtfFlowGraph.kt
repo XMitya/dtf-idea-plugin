@@ -160,6 +160,14 @@ class DtfFlowGraph(val title: String, val nodes: List<DtfFlowNode>, val edges: L
 
     fun node(id: String): DtfFlowNode? = nodes.firstOrNull { it.id == id }
 
+    /** A copy without these boxes, and without every arrow into or out of them. */
+    fun without(ids: Set<String>): DtfFlowGraph = DtfFlowGraph(
+        title,
+        nodes.filter { it.id !in ids },
+        edges.filter { it.fromId !in ids && it.toId !in ids },
+        truncated,
+    )
+
     companion object {
         fun empty(title: String): DtfFlowGraph = DtfFlowGraph(title, emptyList(), emptyList())
     }

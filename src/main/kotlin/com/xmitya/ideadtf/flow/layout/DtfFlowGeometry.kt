@@ -1,7 +1,6 @@
 package com.xmitya.ideadtf.flow.layout
 
 import kotlin.math.abs
-import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -13,7 +12,9 @@ import kotlin.math.sqrt
  * borrowing `Rectangle` would drag mutability and a `Graphics`-shaped mindset into it. The canvas
  * converts at the boundary, which is also where scaling happens.
  */
-data class FlowPoint(val x: Int, val y: Int)
+data class FlowPoint(val x: Int, val y: Int) {
+    fun translated(dx: Int, dy: Int): FlowPoint = FlowPoint(x + dx, y + dy)
+}
 
 data class FlowSize(val width: Int, val height: Int) {
     companion object {
@@ -31,6 +32,18 @@ data class FlowRect(val x: Int, val y: Int, val width: Int, val height: Int) {
     fun contains(point: FlowPoint): Boolean = point.x in x..right && point.y in y..bottom
 
     fun translated(dx: Int, dy: Int): FlowRect = copy(x = x + dx, y = y + dy)
+
+    /** Whether the two share any point, edges included. */
+    fun intersects(other: FlowRect): Boolean = x <= other.right && other.x <= right && y <= other.bottom && other.y <= bottom
+
+    companion object {
+        /** The smallest rectangle holding every point; what a route's bounding box is. */
+        fun around(points: Collection<FlowPoint>): FlowRect {
+            val left = points.minOf { it.x }
+            val top = points.minOf { it.y }
+            return FlowRect(left, top, points.maxOf { it.x } - left, points.maxOf { it.y } - top)
+        }
+    }
 }
 
 /** Distance from [point] to the segment [from]-[to]; what edge hit testing is made of. */
@@ -102,10 +115,16 @@ enum class DtfFlowOrientation {
  * Scaling is the canvas's job, so nothing here knows about HiDPI - which is what keeps the whole
  * layout assertable against exact numbers in a test.
  *
- * @param rankGap horizontal distance between two columns. Wider than an arrowhead needs, because it
- *   is also the room a message-type or condition label will be given once those are drawn.
+ * @param rankGap the least distance between two columns. Wider than an arrowhead needs, because it
+ *   is also the room a message-type or condition label will be given once those are drawn. A gap
+ *   that more arrows have to turn in than fit grows past it - see [trackSpacing].
  * @param labelSlot the space reserved on an edge that has something to say. Computed today, painted
  *   later.
+ * @param trackSpacing how far apart two arrows turning in the same gap run. Wider than a line hop,
+ *   so that a bridge over one track never touches the next.
+ * @param componentGap the room between two flows that have nothing to do with each other.
+ * @param packAspect the width-to-height ratio independent flows are packed towards - a screen's,
+ *   rather than one flow under another in a strip nobody can take in.
  */
 data class DtfFlowLayoutStyle(
     val rankGap: Int = 96,
@@ -114,9 +133,10 @@ data class DtfFlowLayoutStyle(
     val dummyHeight: Int = 8,
     val orderingSweeps: Int = 4,
     val padding: Int = 16,
+    val trackSpacing: Int = 12,
+    val componentGap: Int = 48,
+    val packAspect: Double = 1.6,
 )
-
-internal fun clampMin(value: Int, minimum: Int): Int = max(value, minimum)
 
 internal fun highest(values: Collection<Int>): Int = values.maxOrNull() ?: 0
 

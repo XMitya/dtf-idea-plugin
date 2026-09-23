@@ -7,17 +7,22 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.TestSourcesFilter
 import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.ui.ScrollPaneFactory
 import com.intellij.ui.components.JBLabel
 import com.intellij.util.ui.JBUI
 import com.xmitya.ideadtf.DtfBundle
+import com.xmitya.ideadtf.DtfFileColors
 import com.xmitya.ideadtf.flow.DtfFlowGraph
 import com.xmitya.ideadtf.flow.DtfFlowScope
+import com.xmitya.ideadtf.search.PointerNavigatable
 import kotlinx.coroutines.Job
 import java.awt.BorderLayout
+import java.awt.Color
 import javax.swing.JComponent
 import javax.swing.JPanel
 
@@ -43,7 +48,17 @@ class DtfFlowPanel(private val project: Project, private val scope: DtfFlowScope
     init {
         content.add(banner, BorderLayout.NORTH)
         content.add(status, BorderLayout.CENTER)
-        canvas.installPopupMenu()
+        // The colour the IDE gives the file each box points into - green for a test - the same one
+        // the gutter's popup and the tool window use, so a test caller reads as one everywhere.
+        canvas.fileColorOf = { node ->
+            ReadAction.compute<Color?, RuntimeException> { DtfFileColors.of(project, (node.target as? PointerNavigatable)?.virtualFile) }
+        }
+        canvas.isInTests = { node ->
+            ReadAction.compute<Boolean, RuntimeException> {
+                (node.target as? PointerNavigatable)?.virtualFile?.let { TestSourcesFilter.isTestSources(it, project) } == true
+            }
+        }
+        canvas.installPopupMenu(scope)
         toolbar = createToolbar()
         setContent(content)
     }
@@ -94,9 +109,10 @@ class DtfFlowPanel(private val project: Project, private val scope: DtfFlowScope
             SimpleAction("dtf.flow.refresh", AllIcons.Actions.Refresh) { refresh() },
             Separator.getInstance(),
             DtfFlowLayoutActions.group(canvas),
+            DtfFlowLayoutActions.showTests(canvas),
             Separator.getInstance(),
-            SimpleAction("dtf.flow.zoom.in", AllIcons.General.ZoomIn) { canvas.zoom *= ZOOM_STEP },
-            SimpleAction("dtf.flow.zoom.out", AllIcons.General.ZoomOut) { canvas.zoom /= ZOOM_STEP },
+            SimpleAction("dtf.flow.zoom.in", AllIcons.General.ZoomIn) { canvas.zoomIn() },
+            SimpleAction("dtf.flow.zoom.out", AllIcons.General.ZoomOut) { canvas.zoomOut() },
             SimpleAction("dtf.flow.zoom.actual", AllIcons.General.ActualZoom) { canvas.zoom = 1.0 },
             SimpleAction("dtf.flow.zoom.fit", AllIcons.General.FitContent) { canvas.fitContent(canvas.visibleRect.size) },
         )
@@ -115,6 +131,5 @@ class DtfFlowPanel(private val project: Project, private val scope: DtfFlowScope
 
     private companion object {
         const val TOOLBAR_PLACE = "DtfFlowDiagram"
-        const val ZOOM_STEP = 1.2
     }
 }
