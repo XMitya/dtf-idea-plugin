@@ -103,7 +103,14 @@ turn in it than it has room for.
 
 To follow one chain through a crowded diagram, right-click a box and choose **Highlight Flow**:
 everything that leads to it and everything it leads to, as far as the arrows go, is drawn in orange
-and the rest fades out. **Esc** — or *Clear Highlight* on the same menu — puts it back.
+and the rest fades out. **Esc** — or *Clear Highlight* on the same menu — puts it back. On a task
+box the same menu offers **Show BPMN Flow** of that task: its whole flow, in a tab of its own, rather
+than the slice of it the module's diagram shows.
+
+Tests call a task in ways production code never does, and in a module's diagram they can be most of
+the callers there are. **Show Calls from Tests** on the toolbar takes the calling code in test
+sources off the diagram, and brings it back; tasks stay whatever calls them. Refresh keeps the
+choice.
 
 Where one arrow crosses another it makes a small **bridge** over it, so that two lines passing and
 two lines meeting can be told apart at a glance — only one of any pair hops, or the crossing would

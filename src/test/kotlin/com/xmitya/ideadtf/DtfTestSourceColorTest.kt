@@ -91,6 +91,11 @@ class DtfTestSourceColorTest : DtfFixtureTestCase() {
             assertNull(byClass["Caller"])
             assertEquals(testsColor, byClass["CallerTest"])
             assertNull(canvas.fileColorOfNode(graph.nodes.filterIsInstance<DtfFlowTaskNode>().single().id))
+
+            // The same test root is what the toolbar's Show Calls from Tests takes off.
+            assertTrue(canvas.hasTestCalls)
+            canvas.showTests = false
+            assertEquals(listOf("Caller"), canvas.currentGraph().nodes.filterIsInstance<DtfFlowCallerNode>().map { it.className })
         } finally {
             Disposer.dispose(panel)
         }

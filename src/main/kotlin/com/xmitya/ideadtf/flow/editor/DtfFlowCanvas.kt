@@ -19,6 +19,7 @@ import com.xmitya.ideadtf.flow.DtfFlowGatewayNode
 import com.xmitya.ideadtf.flow.DtfFlowGraph
 import com.xmitya.ideadtf.flow.DtfFlowHighlight
 import com.xmitya.ideadtf.flow.DtfFlowNode
+import com.xmitya.ideadtf.flow.DtfFlowScope
 import com.xmitya.ideadtf.flow.DtfFlowTaskNode
 import com.xmitya.ideadtf.flow.DtfFlowTimerNode
 import com.xmitya.ideadtf.flow.layout.DtfFlowLayout
@@ -63,11 +64,19 @@ class DtfFlowCanvas :
     Scrollable,
     UiDataProvider {
 
-    private var graph: DtfFlowGraph = DtfFlowGraph.empty("")
+    /** The graph as built. What is drawn - [graph] - is this less the calls from tests while those are hidden. */
+    private var built: DtfFlowGraph = DtfFlowGraph.empty("")
+    private var graph: DtfFlowGraph = built
     private var layout: DtfFlowLayout = DtfFlowLayout.EMPTY
     private var hoveredId: String? = null
     private var selectedId: String? = null
     private var highlight: DtfFlowHighlight? = null
+
+    /** The box a highlight was asked for, so that it can be worked out again once what is drawn changes. */
+    private var highlightedFrom: String? = null
+
+    /** The boxes [showTests] takes off the diagram. */
+    private var testCallIds: Set<String> = emptySet()
 
     /**
      * The background the IDE gives each box's file - green for a test, out of the box - looked up
@@ -80,6 +89,25 @@ class DtfFlowCanvas :
      * the canvas itself stays a plain component a test can build without one.
      */
     var fileColorOf: (DtfFlowNode) -> Color? = { null }
+
+    /** Whether a box stands for code in test sources. Supplied by the panel, as [fileColorOf] is. */
+    var isInTests: (DtfFlowNode) -> Boolean = { false }
+
+    /**
+     * Whether calls made from tests are drawn.
+     *
+     * Tests call a task in ways production code never does - with every variant of its input, from a
+     * dozen test classes - and in a module's diagram they can be most of the callers there are. Kept
+     * across a rebuild, so that Refresh does not bring back what the reader chose to hide.
+     */
+    var showTests: Boolean = true
+        set(value) {
+            if (value == field) return
+            field = value
+            showVisible()
+        }
+
+    val hasTestCalls: Boolean get() = testCallIds.isNotEmpty()
 
     /** Boxes the reader has dragged. Everything else is still arranged around them. */
     private val pinned = LinkedHashMap<String, FlowPoint>()
@@ -138,18 +166,37 @@ class DtfFlowCanvas :
      * Not done in the constructor: building an action group needs the `ActionManager`, and a canvas
      * is a plain Swing component that should be constructible before any of that exists.
      */
-    fun installPopupMenu() {
-        PopupHandler.installPopupMenu(this, DtfFlowLayoutActions.popupGroup(this), POPUP_PLACE)
+    fun installPopupMenu(ownScope: DtfFlowScope? = null) {
+        PopupHandler.installPopupMenu(this, DtfFlowLayoutActions.popupGroup(this, ownScope), POPUP_PLACE)
     }
 
     /** Replaces what is drawn. EDT only. */
     fun setGraph(graph: DtfFlowGraph) {
-        this.graph = graph
-        this.hoveredId = null
-        this.selectedId = null
-        this.highlight = null
+        built = graph
+        hoveredId = null
+        selectedId = null
+        highlightedFrom = null
         pinned.clear()
+        // Calling code only: the boxes that stand for a call - a caller, or the scheduleJoin a gateway
+        // is. A task declared in test sources is still a task, and taking those off would leave the
+        // diagram of a test module empty.
+        testCallIds =
+            graph.nodes.filter { (it is DtfFlowCallerNode || it is DtfFlowGatewayNode) && isInTests(it) }.mapTo(HashSet()) { it.id }
         fileColors = colorsOf(graph)
+        showVisible()
+    }
+
+    /**
+     * Draws what [built] and [showTests] call for, and lets go of whatever referred to a box that is
+     * no longer drawn. Dragged positions are kept even for a hidden box, so that one brought back
+     * returns to where it was put.
+     */
+    private fun showVisible() {
+        graph = if (showTests) built else built.without(testCallIds)
+        if (hoveredId?.let(graph::node) == null) hoveredId = null
+        if (selectedId?.let(graph::node) == null) selectedId = null
+        highlight = highlightedFrom?.let { DtfFlowHighlight.of(graph, it) }
+        if (highlight == null) highlightedFrom = null
         relayout()
     }
 
@@ -171,12 +218,14 @@ class DtfFlowCanvas :
      */
     fun highlightFlowOf(nodeId: String) {
         highlight = DtfFlowHighlight.of(graph, nodeId)
+        highlightedFrom = nodeId.takeIf { highlight != null }
         repaint()
     }
 
     fun clearHighlight() {
         if (highlight == null) return
         highlight = null
+        highlightedFrom = null
         repaint()
     }
 
@@ -260,7 +309,7 @@ class DtfFlowCanvas :
         // Both the font and JBUIScale can change under an open tab - moving the window to another
         // monitor is enough - and a cached arrangement would then be off by the scale factor. A
         // theme change brings a different green for tests, too.
-        fileColors = colorsOf(graph)
+        fileColors = colorsOf(built)
         relayout()
     }
 

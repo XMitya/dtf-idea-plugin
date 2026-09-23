@@ -3,7 +3,9 @@ package com.xmitya.ideadtf
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.CommonShortcuts
+import com.intellij.openapi.actionSystem.ToggleAction
 import com.intellij.openapi.actionSystem.ex.ActionUtil
+import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.TestActionEvent
@@ -15,6 +17,7 @@ import com.xmitya.ideadtf.flow.DtfFlowEdgeKind
 import com.xmitya.ideadtf.flow.DtfFlowGatewayNode
 import com.xmitya.ideadtf.flow.DtfFlowGraph
 import com.xmitya.ideadtf.flow.DtfFlowNode
+import com.xmitya.ideadtf.flow.DtfFlowScope
 import com.xmitya.ideadtf.flow.DtfFlowTaskNode
 import com.xmitya.ideadtf.flow.DtfFlowTimerNode
 import com.xmitya.ideadtf.flow.GatewayKind
@@ -223,6 +226,124 @@ class DtfFlowCanvasTest : DtfFlowFixtureTestCase() {
         canvas.clearHighlight() // a second time is a no-op
     }
 
+    /** Hiding the calls from tests takes their boxes and arrows off; showing them brings both back. */
+    fun testHidingTestCallsTakesTheirBoxesOff() {
+        canvas.isInTests = { it is DtfFlowCallerNode }
+        canvas.setGraph(everyShape())
+        assertTrue(canvas.hasTestCalls)
+
+        canvas.showTests = false
+
+        assertNull(canvas.currentGraph().node("caller:1"))
+        assertTrue(canvas.currentGraph().edges.none { it.fromId == "caller:1" })
+        assertNotNull("a task stays, whatever calls it", canvas.currentGraph().node("Left"))
+        assertNull(canvas.nodeIdAt(Point(-20, -20)))
+        paint()
+
+        canvas.showTests = true
+        assertNotNull(canvas.currentGraph().node("caller:1"))
+        canvas.showTests = true // setting the same again changes nothing
+    }
+
+    /** Refresh rebuilds the diagram; it must not bring back what the reader hid. */
+    fun testARebuildKeepsTestCallsHidden() {
+        canvas.isInTests = { it is DtfFlowCallerNode }
+        canvas.showTests = false
+
+        canvas.setGraph(everyShape())
+
+        assertNull(canvas.currentGraph().node("caller:1"))
+    }
+
+    /** A box that is no longer drawn cannot stay selected - the menu would act on something invisible. */
+    fun testHidingASelectedBoxDropsTheSelection() {
+        canvas.isInTests = { it is DtfFlowCallerNode }
+        canvas.setGraph(everyShape())
+        canvas.dispatchEvent(rightPress(centreOf(canvas.currentGraph().nodes.first { it is DtfFlowCallerNode })))
+        assertEquals("caller:1", canvas.selectedNodeId)
+
+        canvas.showTests = false
+
+        assertNull(canvas.selectedNodeId)
+    }
+
+    /** A highlight follows what is drawn: it outlives the calls it does not start from, not the one it does. */
+    fun testAHighlightFollowsWhatIsDrawn() {
+        canvas.isInTests = { it is DtfFlowCallerNode }
+        canvas.setGraph(everyShape())
+        canvas.highlightFlowOf("Left")
+
+        canvas.showTests = false
+        assertEquals(setOf("Left", "join:1", "JoinTask", "Opaque"), canvas.highlightedNodeIds())
+        canvas.showTests = true
+        assertEquals(setOf("caller:1", "Left", "join:1", "JoinTask", "Opaque"), canvas.highlightedNodeIds())
+
+        canvas.highlightFlowOf("caller:1")
+        canvas.showTests = false
+        assertFalse(canvas.hasHighlight)
+    }
+
+    /** The toolbar button: pressed while tests are shown, greyed out on a diagram without any. */
+    fun testTheTestsButtonReflectsAndChangesTheDiagram() {
+        val toggle = DtfFlowLayoutActions.showTests(canvas) as ToggleAction
+        canvas.setGraph(everyShape())
+        val without = TestActionEvent.createTestEvent(toggle)
+        toggle.update(without)
+        assertFalse(without.presentation.isEnabled)
+
+        canvas.isInTests = { it is DtfFlowCallerNode }
+        canvas.setGraph(everyShape())
+        val with = TestActionEvent.createTestEvent(toggle)
+        toggle.update(with)
+        assertTrue(with.presentation.isEnabled)
+        assertTrue(toggle.isSelected(with))
+
+        toggle.setSelected(with, false)
+        assertFalse(canvas.showTests)
+        assertFalse(toggle.isSelected(with))
+    }
+
+    /** Show BPMN Flow on a task box opens that task's whole flow, in a tab of its own. */
+    fun testATaskBoxOpensItsOwnFlow() {
+        addJavaTask("HelloTask", "HELLO")
+        val graph = buildFlowOf("HelloTask")
+        canvas.setGraph(graph)
+        canvas.dispatchEvent(rightPress(centreOf(graph.nodes.single())))
+        val show = popupAction(DtfBundle.message("action.Dtf.ShowFlow.text"))
+
+        val event = TestActionEvent.createTestEvent(show, SimpleDataContext.getProjectContext(project))
+        show.update(event)
+        assertTrue(event.presentation.isEnabledAndVisible)
+        assertEquals(DtfBundle.message("dtf.flow.action.text.named", "HELLO"), event.presentation.text)
+        show.actionPerformed(event)
+
+        assertEquals(DtfBundle.message("dtf.flow.tab.title", "HELLO"), openedFile()?.name)
+    }
+
+    /** In the task's own tab there is nothing to open; on a caller there is no task to open. */
+    fun testShowFlowIsOfferedOnlyForAnotherTask() {
+        addJavaTask("HelloTask", "HELLO")
+        val graph = buildFlowOf("HelloTask")
+        canvas.setGraph(graph)
+        canvas.dispatchEvent(rightPress(centreOf(graph.nodes.single())))
+        val inOwnTab = popupAction(DtfBundle.message("action.Dtf.ShowFlow.text"), DtfFlowScope.Task("HelloTask", "HELLO"))
+        assertFalse(visibleWithProject(inOwnTab))
+
+        canvas.setGraph(everyShape())
+        val show = popupAction(DtfBundle.message("action.Dtf.ShowFlow.text"))
+        canvas.dispatchEvent(rightPress(centreOf(canvas.currentGraph().nodes.first { it is DtfFlowCallerNode })))
+        assertFalse(visibleWithProject(show))
+        show.actionPerformed(TestActionEvent.createTestEvent(show, SimpleDataContext.getProjectContext(project)))
+
+        assertNull(openedFile())
+    }
+
+    private fun visibleWithProject(action: AnAction): Boolean {
+        val event = TestActionEvent.createTestEvent(action, SimpleDataContext.getProjectContext(project))
+        action.update(event)
+        return event.presentation.isVisible
+    }
+
     /** A rebuilt diagram may not have the boxes a highlight named, so it starts plain. */
     fun testARebuildDropsTheHighlight() {
         canvas.setGraph(everyShape())
@@ -366,8 +487,8 @@ class DtfFlowCanvasTest : DtfFlowFixtureTestCase() {
         return Point(0, 0)
     }
 
-    private fun popupAction(text: String): AnAction =
-        DtfFlowLayoutActions.popupGroup(canvas).getChildren(null).first { it.templatePresentation.text == text }
+    private fun popupAction(text: String, ownScope: DtfFlowScope? = null): AnAction =
+        DtfFlowLayoutActions.popupGroup(canvas, ownScope).getChildren(null).first { it.templatePresentation.text == text }
 
     /** Not flagged as a popup trigger: the menu itself would need a screen to open on. */
     private fun rightPress(point: Point) = java.awt.event.MouseEvent(

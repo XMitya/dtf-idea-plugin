@@ -10,6 +10,7 @@ import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.TestSourcesFilter
 import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.ui.ScrollPaneFactory
 import com.intellij.ui.components.JBLabel
@@ -52,7 +53,12 @@ class DtfFlowPanel(private val project: Project, private val scope: DtfFlowScope
         canvas.fileColorOf = { node ->
             ReadAction.compute<Color?, RuntimeException> { DtfFileColors.of(project, (node.target as? PointerNavigatable)?.virtualFile) }
         }
-        canvas.installPopupMenu()
+        canvas.isInTests = { node ->
+            ReadAction.compute<Boolean, RuntimeException> {
+                (node.target as? PointerNavigatable)?.virtualFile?.let { TestSourcesFilter.isTestSources(it, project) } == true
+            }
+        }
+        canvas.installPopupMenu(scope)
         toolbar = createToolbar()
         setContent(content)
     }
@@ -103,6 +109,7 @@ class DtfFlowPanel(private val project: Project, private val scope: DtfFlowScope
             SimpleAction("dtf.flow.refresh", AllIcons.Actions.Refresh) { refresh() },
             Separator.getInstance(),
             DtfFlowLayoutActions.group(canvas),
+            DtfFlowLayoutActions.showTests(canvas),
             Separator.getInstance(),
             SimpleAction("dtf.flow.zoom.in", AllIcons.General.ZoomIn) { canvas.zoomIn() },
             SimpleAction("dtf.flow.zoom.out", AllIcons.General.ZoomOut) { canvas.zoomOut() },
