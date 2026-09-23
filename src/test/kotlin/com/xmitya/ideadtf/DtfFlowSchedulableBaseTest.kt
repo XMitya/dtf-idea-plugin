@@ -45,6 +45,42 @@ class DtfFlowSchedulableBaseTest : DtfFlowFixtureTestCase() {
         assertEquals(listOf("SENDER -> REPORT"), buildFlowOf("ReportTask").arrows())
     }
 
+    /**
+     * The reverse trap: a task's own public `schedule*` helper that launches a *different* task.
+     * Called on `this`, it looks like the task launching itself, but the arrow belongs to the task
+     * named inside the helper.
+     */
+    fun testATaskHelperLaunchingAnotherTaskIsNotALoop() {
+        addJavaTask("FileScanTask", "FILE_SCAN")
+        myFixture.addFileToProject(
+            "PathScanTask.kt",
+            """
+            import com.distributed_task_framework.model.ExecutionContext
+            import com.distributed_task_framework.model.TaskDef
+            import com.distributed_task_framework.service.DistributedTaskService
+            import com.distributed_task_framework.task.Task
+
+            class PathScanTask(private val distributedTaskService: DistributedTaskService) : Task<String> {
+                override fun getDef(): TaskDef<String> = TASK_DEF
+
+                override fun execute(executionContext: ExecutionContext<String>) {
+                    listOf("a", "b").forEach { file -> scheduleFileScan(file) }
+                }
+
+                fun scheduleFileScan(file: String) {
+                    distributedTaskService.schedule(FileScanTask.DEF, ExecutionContext.simple(file))
+                }
+
+                companion object {
+                    val TASK_DEF: TaskDef<String> = TaskDef.privateTaskDef("PATH_SCAN", String::class.java)
+                }
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals(listOf("PATH_SCAN -> FILE_SCAN"), buildFlowOf("PathScanTask").arrows())
+    }
+
     private fun addSchedulableBase() {
         myFixture.addFileToProject(
             "SimpleSchedulableTask.java",

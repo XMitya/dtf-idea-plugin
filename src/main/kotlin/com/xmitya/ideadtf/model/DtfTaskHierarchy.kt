@@ -5,6 +5,7 @@ import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiModifier
 import com.xmitya.ideadtf.DtfFqns
+import com.xmitya.ideadtf.search.CallArgumentMatcher
 import org.jetbrains.uast.UClass
 import org.jetbrains.uast.toUElementOfType
 
@@ -47,6 +48,10 @@ object DtfTaskHierarchy {
      *
      * Public only: a helper nobody outside the class can call is not how anything launches this task,
      * so `schedule(getDef(), ...)` inside one really is a reschedule.
+     *
+     * And only one whose body does hand over `getDef()`. Name and visibility are not enough, least of
+     * all in Kotlin, where every method is public by default: a task's `scheduleFileProcessing(file)`
+     * launches the next task, and reading it as a helper attributes its callers to this one.
      */
     fun schedulingHelpersOf(taskClass: PsiClass): List<PsiMethod> = supertypeClosure(taskClass)
         .flatMap { it.methods.asIterable() }
@@ -54,7 +59,8 @@ object DtfTaskHierarchy {
             it.name.startsWith(SCHEDULE_PREFIX) &&
                 it.hasModifierProperty(PsiModifier.PUBLIC) &&
                 !it.hasModifierProperty(PsiModifier.STATIC) &&
-                !it.hasModifierProperty(PsiModifier.ABSTRACT)
+                !it.hasModifierProperty(PsiModifier.ABSTRACT) &&
+                CallArgumentMatcher.launchesOwnTask(it)
         }
 
     /**

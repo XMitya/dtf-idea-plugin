@@ -262,6 +262,99 @@ class DtfScheduleGutterTest : DtfFixtureTestCase() {
         assertEquals(1, scheduleGutters().size)
     }
 
+    /**
+     * A task's own `schedule*` helper that launches some *other* task. Called on `this`, it has a
+     * task for a receiver and a scheduler's name, yet it is not how this task gets launched: only
+     * the framework call inside the helper is a schedule call.
+     */
+    fun testTaskHelperLaunchingAnotherTaskIsNotMarked() {
+        addKotlinTask()
+        myFixture.configureByText(
+            "PathScanTask.kt",
+            """
+            import com.distributed_task_framework.model.ExecutionContext
+            import com.distributed_task_framework.model.TaskDef
+            import com.distributed_task_framework.service.DistributedTaskService
+            import com.distributed_task_framework.task.Task
+
+            class PathScanTask(private val distributedTaskService: DistributedTaskService) : Task<String> {
+                override fun getDef(): TaskDef<String> = PATH_SCAN
+
+                override fun execute(executionContext: ExecutionContext<String>) {
+                    listOf("a", "b").forEach { file -> scheduleFileScan(file) }
+                }
+
+                fun scheduleFileScan(file: String) {
+                    distributedTaskService.schedule(ScanFileTask.SCAN_FILE, ExecutionContext.simple(file))
+                }
+
+                companion object {
+                    val PATH_SCAN: TaskDef<String> = TaskDef.privateTaskDef("PATH_SCAN", String::class.java)
+                }
+            }
+            """.trimIndent(),
+        )
+        assertEquals(listOf("schedule"), scheduleMarkerNames())
+    }
+
+    /**
+     * The shared bases chain their overloads down to the one that calls `schedule(getDef(), ...)`,
+     * and a task adds its own on top: the helper is still recognised through every hop.
+     */
+    fun testSchedulableHelperDelegatingThroughOverloadsIsMarked() {
+        myFixture.addFileToProject(
+            "SimpleSchedulableTask.java",
+            """
+            import com.distributed_task_framework.model.ExecutionContext;
+            import com.distributed_task_framework.model.TaskId;
+            import com.distributed_task_framework.service.DistributedTaskService;
+            import com.distributed_task_framework.task.Task;
+            import java.time.Duration;
+
+            public abstract class SimpleSchedulableTask<T> implements Task<T> {
+                private DistributedTaskService distributedTaskService;
+
+                public TaskId schedule(T message, Duration delay) throws Exception {
+                    return distributedTaskService.schedule(getDef(), ExecutionContext.simple(message), delay);
+                }
+
+                public TaskId schedule(T message) throws Exception {
+                    return schedule(message, Duration.ZERO);
+                }
+            }
+            """.trimIndent(),
+        )
+        myFixture.addFileToProject(
+            "DeleteScanTask.kt",
+            """
+            import com.distributed_task_framework.model.TaskDef
+
+            class DeleteScanTask : SimpleSchedulableTask<String>() {
+                override fun getDef(): TaskDef<String> = TASK_DEF
+
+                fun schedule(versionId: Long) {
+                    schedule(versionId.toString())
+                }
+
+                companion object {
+                    val TASK_DEF: TaskDef<String> = TaskDef.privateTaskDef("DELETE_SCAN", String::class.java)
+                }
+            }
+            """.trimIndent(),
+        )
+        myFixture.configureByText(
+            "Consumer.kt",
+            """
+            class Consumer(private val deleteScanTask: DeleteScanTask) {
+                fun consume() {
+                    deleteScanTask.schedule(42L)
+                }
+            }
+            """.trimIndent(),
+        )
+        assertEquals(1, scheduleGutters().size)
+    }
+
     /** A self-reschedule names its task through getDef() rather than through a constant. */
     fun testSelfRescheduleIsMarked() {
         myFixture.configureByText(
@@ -414,4 +507,9 @@ class DtfScheduleGutterTest : DtfFixtureTestCase() {
     }
 
     private fun scheduleGutters(): List<GutterMark> = myFixture.findAllGutters().filter { it.icon === DtfIcons.ScheduleGutter }
+
+    /** The method names the schedule markers anchor on, in file order. */
+    private fun scheduleMarkerNames(): List<String?> = scheduleGutters()
+        .filterIsInstance<LineMarkerInfo.LineMarkerGutterIconRenderer<*>>()
+        .map { it.lineMarkerInfo.element?.text }
 }
