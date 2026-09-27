@@ -64,6 +64,19 @@ Behavior | File Colors* says, including nothing at all when it is switched off.
 
 Both searches run on click, under a cancellable progress dialog, never during highlighting.
 
+One question is worth asking of every task without a click: does anything start it at all? A task
+that no `schedule(...)` call launches and no cron runs gets its class name **underlined as a
+warning**, the way IDEA flags a class nobody uses, and hovering says so — *DTF task "CLEANUP" is never
+scheduled*. Calls from test sources do not count, and a task only tests schedule is reported as
+*scheduled only from tests*; a task that is itself test code may be scheduled from tests. Neither
+does the task's own code count: a `schedule(getDef(), ctx)` that reschedules it, or the body of the
+`schedule(message)` helper in its base, needs the task running already — though a call to that
+helper from elsewhere is a launch like any other. Unlike the lists, this answer comes from the
+background highlighting pass, running the gutter's own search once and keeping the result until the
+code changes. It is an ordinary inspection, *DTF | DTF task is never scheduled*: it can be switched
+off, or suppressed on one class for a task another application launches, and *Code | Inspect Code*
+lists every such task in the project at once.
+
 Those three icons, and the tool window, all answer questions about one task at a time. The one they
 cannot answer is what the *chain* looks like — where a flow starts, what hands work to what, and where
 parallel branches come back together. **Show BPMN Flow** draws it, in an editor tab of its own, the
