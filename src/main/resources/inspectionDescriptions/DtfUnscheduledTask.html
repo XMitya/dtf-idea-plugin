@@ -1,0 +1,29 @@
+<html>
+<body>
+Reports a DTF task that nothing ever starts.
+<p>A task counts as started when the framework runs it on a cron - <code>@TaskSchedule</code> or a
+non-empty <code>cron</code> in its <code>task-properties</code> block - or when production code
+schedules it, directly or through a project wrapper.</p>
+<p>Not counted:</p>
+<ul>
+  <li>A schedule written in the task itself or in its abstract base: a task rescheduling itself, or
+    the body of a <code>schedule(message)</code> helper, runs only once something else has started it.
+    Calls to such a helper from other code do count.</li>
+  <li>Calls from test sources. A task scheduled only from tests is reported as such. A task that is
+    itself test code may be scheduled from tests.</li>
+</ul>
+<p>A task launched from another application cannot be seen from here; suppress the warning on its
+class.</p>
+<!-- tooltip end -->
+<p>Example:</p>
+<pre><code>
+public class CleanupTask implements Task&lt;String&gt; {
+    public static final TaskDef&lt;String&gt; CLEANUP = TaskDef.privateTaskDef("CLEANUP", String.class);
+
+    @Override
+    public TaskDef&lt;String&gt; getDef() { return CLEANUP; }
+}
+</code></pre>
+<p>Nothing passes <code>CLEANUP</code> to <code>schedule(...)</code>, so the class name is reported.</p>
+</body>
+</html>

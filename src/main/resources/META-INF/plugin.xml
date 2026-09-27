@@ -16,6 +16,9 @@
         <code>@TaskSchedule</code> or such a <code>cron</code> - carry a clock instead of the plain icon, and
         their list leads with the schedule. Rows coming from test sources or test resources sit on the green
         background IDEA gives test files, following <i>Settings | Appearance &amp; Behavior | File Colors</i>.</p>
+        <p>A task nothing starts is underlined as a warning, the way IDEA flags a class nobody uses: no
+        cron, and no <code>schedule(...)</code> call outside the task's own code - or only calls from
+        tests. <i>Code | Inspect Code</i> lists every such task in the project.</p>
         <p>A <b>DTF Tasks</b> tool window lists every task in the project as a tree of project, module and
         task, named by its <code>TaskDef</code> and carrying the same icons as the gutter; double-click or
         Enter opens the task. A right-click offers the same two searches the gutter does - where the task is
@@ -48,6 +51,15 @@
                                         implementationClass="com.xmitya.ideadtf.marker.DtfTaskLineMarkerProvider"/>
         <codeInsight.lineMarkerProvider language="UAST"
                                         implementationClass="com.xmitya.ideadtf.marker.DtfScheduleCallLineMarkerProvider"/>
+        <!-- A warning on the class name of a task nothing schedules. The description lives in
+             inspectionDescriptions/DtfUnscheduledTask.html, found by the short name. -->
+        <localInspection language="UAST"
+                         shortName="DtfUnscheduledTask"
+                         groupKey="dtf.inspection.group"
+                         key="dtf.inspection.unscheduled.name"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         implementationClass="com.xmitya.ideadtf.inspection.DtfUnscheduledTaskInspection"/>
         <!-- Filters on the file extension, so it needs no dependency on the Properties plugin. -->
         <fileBasedIndex implementation="com.xmitya.ideadtf.config.properties.DtfTaskConfigPropertiesIndex"/>
 
